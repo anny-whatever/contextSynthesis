@@ -7,6 +7,7 @@ import {
 } from "../types/tool";
 import { PrismaClient } from "@prisma/client";
 import OpenAI from "openai";
+import { CostService, WebSearchUsage } from "../services/cost-service";
 
 interface WebSearchInput {
   query: string;
@@ -144,6 +145,14 @@ export class WebSearchTool extends BaseTool {
 
       const searchTime = Date.now() - startTime;
 
+      // Calculate web search cost
+      const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
+      const webSearchUsage: WebSearchUsage = {
+        searchCalls: 1, // Each API call counts as 1 search call
+        model: model
+      };
+      const webSearchCost = CostService.calculateWebSearchCost(webSearchUsage);
+
       // Parse the response from Responses API
       const content = response.output_text;
       if (!content) {
@@ -203,6 +212,9 @@ export class WebSearchTool extends BaseTool {
           include_domains: input.include_domains,
           exclude_domains: input.exclude_domains,
           search_time_ms: searchTime,
+          webSearchCost: webSearchCost,
+          webSearchCalls: webSearchUsage.searchCalls,
+          model: model
         },
         duration: searchTime,
       };

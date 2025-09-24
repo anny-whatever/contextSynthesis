@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import { PrismaClient, Role } from "@prisma/client";
 import { ToolRegistry } from "../tools/tool-registry";
-import { CostService, TokenUsage } from "./cost-service";
+import { CostService, TokenUsage, WebSearchUsage } from "./cost-service";
 import {
   AgentConfig,
   AgentRequest,
@@ -256,15 +256,37 @@ Always be helpful, accurate, and cite your sources when using web search results
         outputTokens: totalOutputTokens
       };
 
-      const costCalculation = CostService.calculateCost(model, tokenUsage);
+      // Calculate web search costs from tool results
+      let totalWebSearchCalls = 0;
+      let totalWebSearchCost = 0;
+      
+      toolsUsed.forEach(tool => {
+        if (tool.toolName === 'web_search' && tool.success && tool.output?.metadata) {
+          const metadata = tool.output.metadata;
+          if (metadata.webSearchCalls && metadata.webSearchCost) {
+            totalWebSearchCalls += metadata.webSearchCalls;
+            totalWebSearchCost += metadata.webSearchCost;
+          }
+        }
+      });
+
+      const webSearchUsage: WebSearchUsage | undefined = totalWebSearchCalls > 0 ? {
+        searchCalls: totalWebSearchCalls,
+        model: model
+      } : undefined;
+
+      const costCalculation = CostService.calculateCost(model, tokenUsage, webSearchUsage);
 
       console.log('💰 [AGENT] Cost calculation:', {
         model,
         inputTokens: totalInputTokens,
         outputTokens: totalOutputTokens,
         totalTokens: totalInputTokens + totalOutputTokens,
+        webSearchCalls: totalWebSearchCalls,
+        webSearchCost: totalWebSearchCost,
         inputCost: costCalculation.inputCost,
         outputCost: costCalculation.outputCost,
+        webSearchCostCalculated: costCalculation.webSearchCost,
         totalCost: costCalculation.totalCost,
         formattedCost: CostService.formatCost(costCalculation.totalCost)
       });
@@ -340,7 +362,7 @@ Always be helpful, accurate, and cite your sources when using web search results
         results.push({
           toolName,
           input: toolInput,
-          output: result.data || result.error,
+          output: result.success ? result : { error: result.error },
           success: result.success,
           duration: Date.now() - startTime,
           ...(result.success ? {} : { error: result.error }),
@@ -458,7 +480,15 @@ Always be helpful, accurate, and cite your sources when using web search results
     userMessage: MessageContext,
     assistantMessage: MessageContext,
     toolsUsed: ToolUsageContext[],
-    costCalculation?: { inputCost: number; outputCost: number; totalCost: number; inputTokens: number; outputTokens: number; }
+    costCalculation?: { 
+      inputCost: number; 
+      outputCost: number; 
+      totalCost: number; 
+      inputTokens: number; 
+      outputTokens: number; 
+      webSearchCalls?: number;
+      webSearchCost?: number;
+    }
   ): Promise<void> {
     try {
       // Save user message
