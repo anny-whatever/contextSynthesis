@@ -34,8 +34,10 @@ model Conversation {
   updatedAt DateTime @updatedAt
 
   // Relations
-  user     User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages Message[]
+  user               User?                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages           Message[]
+  summaries          ConversationSummary[]
+  intentAnalyses     IntentAnalysis[]
 
   @@map("conversations")
 }
@@ -53,8 +55,9 @@ model Message {
   updatedAt      DateTime @updatedAt
 
   // Relations
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  toolUsages   ToolUsage[]
+  conversation    Conversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  toolUsages      ToolUsage[]
+  intentAnalyses  IntentAnalysis[]
 
   @@map("messages")
 }
@@ -75,6 +78,42 @@ model ToolUsage {
   message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@map("tool_usages")
+}
+
+model ConversationSummary {
+  id             String   @id @default(cuid())
+  conversationId String
+  summaryText    String   // Compressed conversation summary
+  keyTopics      Json     // Array of key topics discussed
+  messageRange   Json     // {startMessageId, endMessageId, messageCount}
+  summaryLevel   Int      @default(1) // 1 = first summary, 2 = summary of summaries, etc.
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@map("conversation_summaries")
+}
+
+model IntentAnalysis {
+  id                    String   @id @default(cuid())
+  conversationId        String
+  userMessageId         String
+  currentIntent         String   // What the user is trying to achieve
+  contextualRelevance   String   // 'high', 'medium', 'low'
+  relationshipToHistory String   // 'continuation', 'new_topic', 'clarification'
+  keyTopics             Json     // Array of topics relevant to current intent
+  pendingQuestions      Json     // Array of questions that need follow-up
+  lastAssistantQuestion String?  // Last question asked by assistant
+  analysisResult        Json     // Full analysis result for debugging
+  createdAt             DateTime @default(now())
+
+  // Relations
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userMessage  Message      @relation(fields: [userMessageId], references: [id], onDelete: Cascade)
+
+  @@map("intent_analyses")
 }
 
 model AgentSession {

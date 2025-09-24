@@ -96,23 +96,30 @@ export function ChatContainer() {
     }
   };
 
-  const deleteConversation = async (conversationId: string, event: React.MouseEvent) => {
+  const deleteConversation = async (
+    conversationId: string,
+    event: React.MouseEvent
+  ) => {
     event.stopPropagation(); // Prevent triggering selectConversation
-    
-    if (!confirm("Are you sure you want to delete this conversation? This action cannot be undone.")) {
+
+    if (
+      !confirm(
+        "Are you sure you want to delete this conversation? This action cannot be undone."
+      )
+    ) {
       return;
     }
 
     try {
       setError(null);
       await ChatApiService.deleteConversation(conversationId);
-      
+
       // If the deleted conversation is currently selected, clear it
       if (conversation?.id === conversationId) {
         setConversation(null);
         setMessages([]);
       }
-      
+
       // Refresh the conversations list
       loadUserConversations();
     } catch (err) {
@@ -234,10 +241,10 @@ export function ChatContainer() {
                             <Button
                               variant="ghost"
                               size="sm"
-                              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                              className="p-0 w-8 h-8 text-muted-foreground hover:text-destructive"
                               onClick={(e) => deleteConversation(conv.id, e)}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              <Trash2 className="w-4 h-4" />
                             </Button>
                           </div>
                         </Card>
@@ -249,7 +256,7 @@ export function ChatContainer() {
             </Dialog>
           </div>
         </div>
-        
+
         {/* Cost Counter */}
         {conversation && (
           <div className="flex justify-center">

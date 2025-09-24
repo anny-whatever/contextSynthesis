@@ -2,6 +2,8 @@ import OpenAI from "openai";
 import { PrismaClient, Role } from "@prisma/client";
 import { ToolRegistry } from "../tools/tool-registry";
 import { CostService, TokenUsage, WebSearchUsage } from "./cost-service";
+import { IntentAnalysisService, IntentAnalysisResult } from "./intent-analysis-service";
+import { ConversationSummaryService, SummaryResult } from "./conversation-summary-service";
 import {
   AgentConfig,
   AgentRequest,
@@ -15,6 +17,8 @@ export class AgentService {
   private openai: OpenAI;
   private prisma: PrismaClient;
   private toolRegistry: ToolRegistry;
+  private intentAnalysisService: IntentAnalysisService;
+  private conversationSummaryService: ConversationSummaryService;
   private config: AgentConfig;
 
   constructor(
@@ -31,6 +35,8 @@ export class AgentService {
 
     this.prisma = prisma || new PrismaClient();
     this.toolRegistry = toolRegistry || new ToolRegistry(this.prisma);
+    this.intentAnalysisService = new IntentAnalysisService(this.prisma, this.openai);
+    this.conversationSummaryService = new ConversationSummaryService(this.prisma, this.openai);
 
     this.config = {
       model: process.env.DEFAULT_AGENT_MODEL || "gpt-4o-mini",
@@ -95,8 +101,44 @@ Always be helpful, accurate, and cite your sources when using web search results
       };
       context.messageHistory.push(userMessage);
 
-      // Prepare messages for OpenAI
-      const messages = this.prepareMessagesForOpenAI(context);
+      // Save user message first to get its ID for intent analysis
+      const savedUserMessage = await this.prisma.message.create({
+        data: {
+          conversationId: conversationId,
+          role: userMessage.role,
+          content: userMessage.content,
+        },
+      });
+
+      // Perform intent analysis for every user message
+      console.log('🧠 [AGENT] Performing intent analysis for user message');
+      const intentAnalysis = await this.intentAnalysisService.analyzeIntent(
+        conversationId,
+        savedUserMessage.id,
+        request.message
+      );
+
+      console.log('🧠 [AGENT] Intent analysis completed:', {
+        currentIntent: intentAnalysis.currentIntent,
+        contextualRelevance: intentAnalysis.contextualRelevance,
+        relationshipToHistory: intentAnalysis.relationshipToHistory,
+        keyTopics: intentAnalysis.keyTopics
+      });
+
+      // Check if we need to create a conversation summary
+      console.log('📊 [AGENT] Checking for conversation summarization');
+      const summaryResult = await this.conversationSummaryService.checkAndCreateSummary(conversationId);
+      
+      if (summaryResult) {
+        console.log('📊 [AGENT] Created conversation summary:', {
+          messageCount: summaryResult.messageRange.messageCount,
+          summaryLevel: summaryResult.summaryLevel,
+          keyTopics: summaryResult.keyTopics
+        });
+      }
+
+      // Prepare messages for OpenAI with intent analysis context
+      const messages = this.prepareMessagesForOpenAI(context, intentAnalysis);
 
       // Console logging: System prompt and messages
       console.log('💬 [AGENT] Prepared messages for OpenAI:', {
@@ -300,10 +342,10 @@ Always be helpful, accurate, and cite your sources when using web search results
       };
       context.messageHistory.push(assistantMessageContext);
 
-      // Persist conversation with cost tracking
+      // Persist conversation (user message already saved for intent analysis)
       await this.persistConversation(
         context,
-        userMessage,
+        savedUserMessage.id,
         assistantMessageContext,
         toolsUsed,
         costCalculation
@@ -382,11 +424,27 @@ Always be helpful, accurate, and cite your sources when using web search results
     return results;
   }
 
-  private prepareMessagesForOpenAI(context: ConversationContext): any[] {
+  private prepareMessagesForOpenAI(context: ConversationContext, intentAnalysis?: IntentAnalysisResult): any[] {
+    let systemPrompt = this.config.systemPrompt;
+    
+    // Enhance system prompt with intent analysis context
+    if (intentAnalysis) {
+      systemPrompt += `\n\n## CURRENT CONVERSATION CONTEXT
+**User Intent**: ${intentAnalysis.currentIntent}
+**Contextual Relevance**: ${intentAnalysis.contextualRelevance}
+**Relationship to History**: ${intentAnalysis.relationshipToHistory}
+**Key Topics**: ${intentAnalysis.keyTopics.join(', ')}
+**Compressed Context**: ${intentAnalysis.compressedContext}
+${intentAnalysis.pendingQuestions.length > 0 ? `**Pending Questions**: ${intentAnalysis.pendingQuestions.join(', ')}` : ''}
+${intentAnalysis.lastAssistantQuestion ? `**Last Assistant Question**: ${intentAnalysis.lastAssistantQuestion}` : ''}
+
+Use this context to provide more relevant and focused responses that align with the user's current intent and conversation flow.`;
+    }
+
     const messages = [
       {
         role: "system",
-        content: this.config.systemPrompt,
+        content: systemPrompt,
       },
     ];
 
@@ -477,7 +535,7 @@ Always be helpful, accurate, and cite your sources when using web search results
 
   private async persistConversation(
     context: ConversationContext,
-    userMessage: MessageContext,
+    savedUserMessageId: string,
     assistantMessage: MessageContext,
     toolsUsed: ToolUsageContext[],
     costCalculation?: { 
@@ -491,14 +549,7 @@ Always be helpful, accurate, and cite your sources when using web search results
     }
   ): Promise<void> {
     try {
-      // Save user message
-      const savedUserMessage = await this.prisma.message.create({
-        data: {
-          conversationId: context.conversationId!,
-          role: userMessage.role,
-          content: userMessage.content,
-        },
-      });
+      // User message already saved for intent analysis
 
       // Save assistant message with cost/token data
       const savedAssistantMessage = await this.prisma.message.create({

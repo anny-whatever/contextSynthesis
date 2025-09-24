@@ -1,21 +1,22 @@
-import { Router, Request, Response } from 'express';
-import { PrismaClient } from '@prisma/client';
-import { chatLimiter, apiLimiter } from '../middleware/rate-limiter';
-import { 
-  validateChatRequest, 
+import { Router, Request, Response } from "express";
+import { PrismaClient } from "@prisma/client";
+import { chatLimiter, apiLimiter } from "../middleware/rate-limiter";
+import {
+  validateChatRequest,
   validateCreateConversationRequest,
   validateConversationId,
-  validateUserId 
-} from '../middleware/validation';
-import { asyncHandler } from '../middleware/error-handler';
-import { AgentService } from '../services/agent-service';
+  validateUserId,
+} from "../middleware/validation";
+import { asyncHandler } from "../middleware/error-handler";
+import { AgentService } from "../services/agent-service";
 
 const router = Router();
 const prisma = new PrismaClient();
 const agentService = new AgentService();
 
 // POST /api/chat - Send a message and get AI response
-router.post('/', 
+router.post(
+  "/",
   chatLimiter,
   validateChatRequest,
   asyncHandler(async (req: Request, res: Response) => {
@@ -25,7 +26,7 @@ router.post('/',
       const agentResponse = await agentService.processMessage({
         message,
         conversationId,
-        userId: userId || 'anonymous',
+        userId: userId || "anonymous",
         context,
       });
 
@@ -41,11 +42,11 @@ router.post('/',
         },
       });
     } catch (error) {
-      console.error('Chat error:', error);
+      console.error("Chat error:", error);
       res.status(500).json({
         success: false,
         error: {
-          message: 'Failed to process chat message',
+          message: "Failed to process chat message",
           statusCode: 500,
         },
       });
@@ -54,7 +55,8 @@ router.post('/',
 );
 
 // POST /api/chat/conversations - Create a new conversation
-router.post('/conversations',
+router.post(
+  "/conversations",
   apiLimiter,
   validateCreateConversationRequest,
   asyncHandler(async (req: Request, res: Response) => {
@@ -62,8 +64,8 @@ router.post('/conversations',
 
     const conversation = await prisma.conversation.create({
       data: {
-        title: title || 'New Conversation',
-        userId: userId || 'anonymous',
+        title: title || "New Conversation",
+        userId: userId || "anonymous",
       },
     });
 
@@ -75,7 +77,8 @@ router.post('/conversations',
 );
 
 // GET /api/chat/conversations/:id - Get conversation details
-router.get('/conversations/:id',
+router.get(
+  "/conversations/:id",
   apiLimiter,
   validateConversationId,
   asyncHandler(async (req: Request, res: Response) => {
@@ -85,7 +88,7 @@ router.get('/conversations/:id',
       return res.status(400).json({
         success: false,
         error: {
-          message: 'Conversation ID is required',
+          message: "Conversation ID is required",
           statusCode: 400,
         },
       });
@@ -98,7 +101,7 @@ router.get('/conversations/:id',
           include: {
             toolUsages: true,
           },
-          orderBy: { createdAt: 'asc' },
+          orderBy: { createdAt: "asc" },
         },
       },
     });
@@ -107,7 +110,7 @@ router.get('/conversations/:id',
       return res.status(404).json({
         success: false,
         error: {
-          message: 'Conversation not found',
+          message: "Conversation not found",
           statusCode: 404,
         },
       });
@@ -121,7 +124,8 @@ router.get('/conversations/:id',
 );
 
 // GET /api/chat/conversations/:id/messages - Get conversation messages
-router.get('/conversations/:id/messages',
+router.get(
+  "/conversations/:id/messages",
   apiLimiter,
   validateConversationId,
   asyncHandler(async (req: Request, res: Response) => {
@@ -132,7 +136,7 @@ router.get('/conversations/:id/messages',
       return res.status(400).json({
         success: false,
         error: {
-          message: 'Conversation ID is required',
+          message: "Conversation ID is required",
           statusCode: 400,
         },
       });
@@ -147,7 +151,7 @@ router.get('/conversations/:id/messages',
       return res.status(404).json({
         success: false,
         error: {
-          message: 'Conversation not found',
+          message: "Conversation not found",
           statusCode: 404,
         },
       });
@@ -158,7 +162,7 @@ router.get('/conversations/:id/messages',
       include: {
         toolUsages: true,
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "asc" },
       take: Number(limit),
       skip: Number(offset),
     });
@@ -183,7 +187,8 @@ router.get('/conversations/:id/messages',
 );
 
 // DELETE /api/chat/conversations/:id - Delete a conversation
-router.delete('/conversations/:id',
+router.delete(
+  "/conversations/:id",
   apiLimiter,
   validateConversationId,
   asyncHandler(async (req: Request, res: Response) => {
@@ -193,7 +198,7 @@ router.delete('/conversations/:id',
       return res.status(400).json({
         success: false,
         error: {
-          message: 'Conversation ID is required',
+          message: "Conversation ID is required",
           statusCode: 400,
         },
       });
@@ -208,7 +213,7 @@ router.delete('/conversations/:id',
       return res.status(404).json({
         success: false,
         error: {
-          message: 'Conversation not found',
+          message: "Conversation not found",
           statusCode: 404,
         },
       });
@@ -221,21 +226,22 @@ router.delete('/conversations/:id',
 
     return res.json({
       success: true,
-      message: 'Conversation deleted successfully',
+      message: "Conversation deleted successfully",
     });
   })
 );
 
 // GET /api/chat/user/:userId/conversations - Get user's conversations
-router.get('/user/:userId/conversations',
+router.get(
+  "/user/:userId/conversations",
   apiLimiter,
   validateUserId,
   asyncHandler(async (req: Request, res: Response) => {
-    const { userId = 'anonymous', limit = 20, offset = 0 } = req.query;
+    const { userId = "anonymous", limit = 20, offset = 0 } = req.query;
 
     const conversations = await prisma.conversation.findMany({
       where: { userId: userId as string },
-      orderBy: { updatedAt: 'desc' },
+      orderBy: { updatedAt: "desc" },
       take: parseInt(limit as string),
       skip: parseInt(offset as string),
       include: {
@@ -244,7 +250,7 @@ router.get('/user/:userId/conversations',
         },
         messages: {
           take: 1,
-          orderBy: { createdAt: 'desc' },
+          orderBy: { createdAt: "desc" },
           select: {
             content: true,
             role: true,
@@ -266,13 +272,12 @@ router.get('/user/:userId/conversations',
           total: totalCount,
           limit: parseInt(limit as string),
           offset: parseInt(offset as string),
-          hasMore: totalCount > parseInt(offset as string) + conversations.length,
+          hasMore:
+            totalCount > parseInt(offset as string) + conversations.length,
         },
       },
     });
   })
 );
-
-
 
 export default router;
