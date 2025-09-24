@@ -1,8 +1,6 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent } from "../ui/card";
 import { Button } from "../ui/button";
-import { Badge } from "../ui/badge";
-import { RefreshCw, DollarSign, Zap } from "lucide-react";
+import { RefreshCw, DollarSign } from "lucide-react";
 import { ChatApiService } from "../../services/chatApi";
 import type { Conversation } from "../../types/chat";
 
@@ -55,7 +53,8 @@ export function CostCounter({ conversation, onRefresh }: CostCounterProps) {
           totalInputTokens: conv.totalInputTokens || 0,
           totalOutputTokens: conv.totalOutputTokens || 0,
           totalCost: conv.totalCost || 0,
-          totalTokens: (conv.totalInputTokens || 0) + (conv.totalOutputTokens || 0),
+          totalTokens:
+            (conv.totalInputTokens || 0) + (conv.totalOutputTokens || 0),
         });
       }
       onRefresh?.();
@@ -72,7 +71,9 @@ export function CostCounter({ conversation, onRefresh }: CostCounterProps) {
         totalInputTokens: conversation.totalInputTokens || 0,
         totalOutputTokens: conversation.totalOutputTokens || 0,
         totalCost: conversation.totalCost || 0,
-        totalTokens: (conversation.totalInputTokens || 0) + (conversation.totalOutputTokens || 0),
+        totalTokens:
+          (conversation.totalInputTokens || 0) +
+          (conversation.totalOutputTokens || 0),
       });
     }
   }, [conversation]);
@@ -82,65 +83,28 @@ export function CostCounter({ conversation, onRefresh }: CostCounterProps) {
   }
 
   return (
-    <Card className="w-full max-w-md">
-      <CardContent className="p-3">
-        <div className="flex items-center justify-between mb-2">
-          <div className="flex items-center gap-2">
-            <DollarSign className="h-4 w-4 text-green-600" />
-            <span className="text-sm font-medium">Usage & Cost</span>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={refreshCostData}
-            disabled={isRefreshing}
-            className="h-6 w-6 p-0"
-          >
-            <RefreshCw className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`} />
-          </Button>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 text-xs">
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Total Cost:</span>
-              <Badge variant="secondary" className="text-xs font-mono">
-                {formatCost(costData.totalCost)}
-              </Badge>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Total Tokens:</span>
-              <Badge variant="outline" className="text-xs font-mono">
-                <Zap className="h-3 w-3 mr-1" />
-                {formatTokens(costData.totalTokens)}
-              </Badge>
-            </div>
-          </div>
-
-          <div className="space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Input:</span>
-              <Badge variant="outline" className="text-xs font-mono">
-                {formatTokens(costData.totalInputTokens)}
-              </Badge>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-muted-foreground">Output:</span>
-              <Badge variant="outline" className="text-xs font-mono">
-                {formatTokens(costData.totalOutputTokens)}
-              </Badge>
-            </div>
-          </div>
-        </div>
-
-        {costData.totalCost > 0 && (
-          <div className="mt-2 pt-2 border-t">
-            <div className="text-xs text-muted-foreground text-center">
-              Model: GPT-4o-mini • Input: $0.15/1M • Output: $0.60/1M
-            </div>
-          </div>
-        )}
-      </CardContent>
-    </Card>
+    <div className="flex gap-3 items-center text-xs text-muted-foreground">
+      <div className="flex gap-1 items-center">
+        <span className="font-mono">{formatCost(costData.totalCost)}</span>
+      </div>
+      <div className="flex gap-2 items-center">
+        <span>Tokens: {formatTokens(costData.totalTokens)}</span>
+        <span className="text-muted-foreground/60">
+          ({formatTokens(costData.totalInputTokens)}↑{" "}
+          {formatTokens(costData.totalOutputTokens)}↓)
+        </span>
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={refreshCostData}
+        disabled={isRefreshing}
+        className="p-0 w-5 h-5 opacity-60 hover:opacity-100"
+      >
+        <RefreshCw
+          className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`}
+        />
+      </Button>
+    </div>
   );
 }
