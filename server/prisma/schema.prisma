@@ -27,6 +27,9 @@ model Conversation {
   id        String   @id @default(cuid())
   title     String?
   userId    String?
+  totalInputTokens  Int      @default(0)
+  totalOutputTokens Int      @default(0)
+  totalCost         Float    @default(0.0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -42,6 +45,9 @@ model Message {
   conversationId String
   role           Role
   content        String
+  inputTokens    Int?     // Tokens used for input (for ASSISTANT messages)
+  outputTokens   Int?     // Tokens used for output (for ASSISTANT messages)
+  cost           Float?   // Cost for this specific message
   metadata       Json?    // Store additional metadata like tool calls, citations, etc.
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt

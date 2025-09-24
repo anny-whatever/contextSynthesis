@@ -14,6 +14,7 @@ import {
 import { AlertCircle, Plus, MessageSquare } from "lucide-react";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
+import { CostCounter } from "./CostCounter";
 import { ChatApiService } from "../../services/chatApi";
 import type { Message, Conversation } from "../../types/chat";
 
@@ -140,7 +141,7 @@ export function ChatContainer() {
     <div className="flex flex-col mx-auto w-full max-w-4xl h-screen">
       {/* Header */}
       <div className="p-3 border-b sm:p-4 bg-background">
-        <div className="flex justify-between items-center">
+        <div className="flex justify-between items-center mb-3">
           <div>
             <h1 className="text-xl font-bold sm:text-2xl">AI Assistant</h1>
             <p className="text-xs sm:text-sm text-muted-foreground">
@@ -210,6 +211,13 @@ export function ChatContainer() {
             </Dialog>
           </div>
         </div>
+        
+        {/* Cost Counter */}
+        {conversation && (
+          <div className="flex justify-center">
+            <CostCounter conversation={conversation} />
+          </div>
+        )}
       </div>
 
       {/* Error Alert */}

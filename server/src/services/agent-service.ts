@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { PrismaClient, Role } from "@prisma/client";
 import { ToolRegistry } from "../tools/tool-registry";
+import { CostService, TokenUsage } from "./cost-service";
 import {
   AgentConfig,
   AgentRequest,
@@ -57,9 +58,20 @@ Always be helpful, accurate, and cite your sources when using web search results
     const startTime = Date.now();
     let conversationId = request.conversationId;
 
+    // Console logging: Initial request
+    console.log('🚀 [AGENT] Processing new message request:', {
+      timestamp: new Date().toISOString(),
+      conversationId: conversationId || 'NEW',
+      userId: request.userId || 'anonymous',
+      messageLength: request.message.length,
+      hasContext: !!request.context,
+      options: request.options
+    });
+
     // Only create a new conversation if no conversationId is provided
     if (!conversationId) {
       conversationId = await this.createNewConversation(request.userId);
+      console.log('📝 [AGENT] Created new conversation:', { conversationId });
     }
 
     try {
@@ -68,6 +80,12 @@ Always be helpful, accurate, and cite your sources when using web search results
         conversationId,
         request.userId
       );
+
+      console.log('📚 [AGENT] Loaded conversation context:', {
+        conversationId,
+        messageHistoryCount: context.messageHistory.length,
+        userId: context.userId
+      });
 
       // Add user message to context
       const userMessage: MessageContext = {
@@ -80,11 +98,32 @@ Always be helpful, accurate, and cite your sources when using web search results
       // Prepare messages for OpenAI
       const messages = this.prepareMessagesForOpenAI(context);
 
+      // Console logging: System prompt and messages
+      console.log('💬 [AGENT] Prepared messages for OpenAI:', {
+        systemPrompt: this.config.systemPrompt.substring(0, 200) + '...',
+        messageCount: messages.length,
+        totalCharacters: JSON.stringify(messages).length
+      });
+
+      console.log('📋 [AGENT] Full message payload:', {
+        messages: messages.map(msg => ({
+          role: msg.role,
+          contentLength: msg.content?.length || 0,
+          contentPreview: msg.content?.substring(0, 100) + '...'
+        }))
+      });
+
       // Get tools if enabled
       const tools =
         this.config.enableTools && request.options?.enableTools !== false
           ? this.toolRegistry.getToolDefinitions()
           : [];
+
+      console.log('🔧 [AGENT] Tools configuration:', {
+        toolsEnabled: this.config.enableTools,
+        availableToolsCount: tools.length,
+        toolNames: tools.map(t => t.function.name)
+      });
 
       // Call OpenAI API
       const model = request.options?.model || this.config.model;
@@ -102,9 +141,25 @@ Always be helpful, accurate, and cite your sources when using web search results
         completionParams.tool_choice = "auto";
       }
 
+      console.log('🤖 [AGENT] Calling OpenAI API with params:', {
+        model,
+        messageCount: messages.length,
+        maxTokens: completionParams.max_completion_tokens,
+        toolsCount: tools.length,
+        timestamp: new Date().toISOString()
+      });
+
       const completion = await this.openai.chat.completions.create(
         completionParams
       );
+
+      console.log('✅ [AGENT] OpenAI API response received:', {
+        model: completion.model,
+        usage: completion.usage,
+        finishReason: completion.choices[0]?.finish_reason,
+        hasToolCalls: !!completion.choices[0]?.message?.tool_calls?.length,
+        responseLength: completion.choices[0]?.message?.content?.length || 0
+      });
 
       const assistantMessage = completion.choices[0]?.message;
       if (!assistantMessage) {
@@ -114,15 +169,33 @@ Always be helpful, accurate, and cite your sources when using web search results
       // Handle tool calls if present
       const toolsUsed: ToolUsageContext[] = [];
       let finalContent = assistantMessage.content || "";
+      let followUpCompletion: any = null;
 
       if (
         assistantMessage.tool_calls &&
         assistantMessage.tool_calls.length > 0
       ) {
+        console.log('🔧 [AGENT] Processing tool calls:', {
+          toolCallCount: assistantMessage.tool_calls.length,
+          toolCalls: assistantMessage.tool_calls.map(tc => ({
+            id: tc.id,
+            type: tc.type,
+            functionName: tc.type === 'function' ? (tc as any).function?.name : 'unknown',
+            argumentsLength: tc.type === 'function' ? (tc as any).function?.arguments?.length || 0 : 0
+          }))
+        });
+
         const toolResults = await this.executeToolCalls(
           assistantMessage.tool_calls
         );
         toolsUsed.push(...toolResults);
+
+        console.log('🔧 [AGENT] Tool execution completed:', {
+          resultsCount: toolResults.length,
+          successfulTools: toolResults.filter(r => r.success).length,
+          failedTools: toolResults.filter(r => !r.success).length,
+          totalDuration: toolResults.reduce((sum, r) => sum + r.duration, 0)
+        });
 
         // Create follow-up completion with tool results
         const toolMessages = [
@@ -147,15 +220,54 @@ Always be helpful, accurate, and cite your sources when using web search results
             request.options?.maxTokens || this.config.maxTokens,
         };
 
+        console.log('🤖 [AGENT] Making follow-up API call with tool results:', {
+          model,
+          messageCount: toolMessages.length,
+          timestamp: new Date().toISOString()
+        });
+
         // Only add temperature for models that support it (exclude o1 and some other models)
 
-        const followUpCompletion = await this.openai.chat.completions.create(
+        followUpCompletion = await this.openai.chat.completions.create(
           followUpParams
         );
+
+        console.log('✅ [AGENT] Follow-up API response received:', {
+          usage: followUpCompletion.usage,
+          finishReason: followUpCompletion.choices[0]?.finish_reason,
+          responseLength: followUpCompletion.choices[0]?.message?.content?.length || 0
+        });
 
         finalContent =
           followUpCompletion.choices[0]?.message?.content || finalContent;
       }
+
+      // Calculate total token usage and cost
+      let totalInputTokens = completion.usage?.prompt_tokens || 0;
+      let totalOutputTokens = completion.usage?.completion_tokens || 0;
+      
+      if (followUpCompletion?.usage) {
+        totalInputTokens += followUpCompletion.usage.prompt_tokens || 0;
+        totalOutputTokens += followUpCompletion.usage.completion_tokens || 0;
+      }
+
+      const tokenUsage: TokenUsage = {
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens
+      };
+
+      const costCalculation = CostService.calculateCost(model, tokenUsage);
+
+      console.log('💰 [AGENT] Cost calculation:', {
+        model,
+        inputTokens: totalInputTokens,
+        outputTokens: totalOutputTokens,
+        totalTokens: totalInputTokens + totalOutputTokens,
+        inputCost: costCalculation.inputCost,
+        outputCost: costCalculation.outputCost,
+        totalCost: costCalculation.totalCost,
+        formattedCost: CostService.formatCost(costCalculation.totalCost)
+      });
 
       // Add assistant message to context
       const assistantMessageContext: MessageContext = {
@@ -166,15 +278,25 @@ Always be helpful, accurate, and cite your sources when using web search results
       };
       context.messageHistory.push(assistantMessageContext);
 
-      // Persist conversation
+      // Persist conversation with cost tracking
       await this.persistConversation(
         context,
         userMessage,
         assistantMessageContext,
-        toolsUsed
+        toolsUsed,
+        costCalculation
       );
 
       const duration = Date.now() - startTime;
+
+      console.log('🎯 [AGENT] Request completed successfully:', {
+        conversationId,
+        duration: `${duration}ms`,
+        finalContentLength: finalContent.length,
+        toolsUsedCount: toolsUsed.length,
+        totalCost: CostService.formatCost(costCalculation.totalCost),
+        timestamp: new Date().toISOString()
+      });
 
       return {
         message: finalContent,
@@ -183,9 +305,10 @@ Always be helpful, accurate, and cite your sources when using web search results
         context,
         metadata: {
           model: request.options?.model || this.config.model,
-          ...(completion.usage?.total_tokens && {
-            tokensUsed: completion.usage.total_tokens,
-          }),
+          tokensUsed: totalInputTokens + totalOutputTokens,
+          inputTokens: totalInputTokens,
+          outputTokens: totalOutputTokens,
+          cost: costCalculation.totalCost,
           duration,
           timestamp: new Date(),
         },
@@ -334,7 +457,8 @@ Always be helpful, accurate, and cite your sources when using web search results
     context: ConversationContext,
     userMessage: MessageContext,
     assistantMessage: MessageContext,
-    toolsUsed: ToolUsageContext[]
+    toolsUsed: ToolUsageContext[],
+    costCalculation?: { inputCost: number; outputCost: number; totalCost: number; inputTokens: number; outputTokens: number; }
   ): Promise<void> {
     try {
       // Save user message
@@ -346,12 +470,15 @@ Always be helpful, accurate, and cite your sources when using web search results
         },
       });
 
-      // Save assistant message
+      // Save assistant message with cost/token data
       const savedAssistantMessage = await this.prisma.message.create({
         data: {
           conversationId: context.conversationId!,
           role: assistantMessage.role,
           content: assistantMessage.content,
+          inputTokens: costCalculation?.inputTokens || null,
+          outputTokens: costCalculation?.outputTokens || null,
+          cost: costCalculation?.totalCost || null,
         },
       });
 
@@ -370,11 +497,28 @@ Always be helpful, accurate, and cite your sources when using web search results
         });
       }
 
-      // Update conversation timestamp
-      await this.prisma.conversation.update({
-        where: { id: context.conversationId! },
-        data: { updatedAt: new Date() },
-      });
+      // Update conversation with aggregated cost/token data
+      if (costCalculation) {
+        const currentConversation = await this.prisma.conversation.findUnique({
+          where: { id: context.conversationId! },
+          select: { totalInputTokens: true, totalOutputTokens: true, totalCost: true }
+        });
+
+        await this.prisma.conversation.update({
+          where: { id: context.conversationId! },
+          data: { 
+            updatedAt: new Date(),
+            totalInputTokens: (currentConversation?.totalInputTokens || 0) + costCalculation.inputTokens,
+            totalOutputTokens: (currentConversation?.totalOutputTokens || 0) + costCalculation.outputTokens,
+            totalCost: (currentConversation?.totalCost || 0) + costCalculation.totalCost,
+          },
+        });
+      } else {
+        await this.prisma.conversation.update({
+          where: { id: context.conversationId! },
+          data: { updatedAt: new Date() },
+        });
+      }
     } catch (error) {
       console.error("Error persisting conversation:", error);
       // Don't throw here to avoid breaking the response flow

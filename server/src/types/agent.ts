@@ -42,6 +42,9 @@ export interface AgentResponse {
   metadata: {
     model: string;
     tokensUsed?: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    cost?: number;
     duration: number;
     timestamp: Date;
   };

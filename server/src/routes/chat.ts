@@ -95,11 +95,10 @@ router.get('/conversations/:id',
       where: { id: conversationId },
       include: {
         messages: {
-          orderBy: { createdAt: 'desc' },
-          take: 10,
-        },
-        user: {
-          select: { id: true, name: true, email: true },
+          include: {
+            toolUsages: true,
+          },
+          orderBy: { createdAt: 'asc' },
         },
       },
     });

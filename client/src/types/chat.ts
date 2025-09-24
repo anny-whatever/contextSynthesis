@@ -21,6 +21,9 @@ export interface Conversation {
   userId: string;
   createdAt: Date;
   updatedAt: Date;
+  totalInputTokens?: number;
+  totalOutputTokens?: number;
+  totalCost?: number;
   messages?: Message[];
 }
 
@@ -35,6 +38,9 @@ export interface ChatResponse {
     metadata: {
       model: string;
       tokensUsed?: number;
+      inputTokens?: number;
+      outputTokens?: number;
+      cost?: number;
       duration: number;
       timestamp: string;
     };
