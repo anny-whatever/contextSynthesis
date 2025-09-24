@@ -1,8 +1,8 @@
-import { useState } from 'react';
-import type { KeyboardEvent } from 'react';
-import { Button } from '../ui/button';
-import { Textarea } from '../ui/textarea';
-import { Send, Loader2 } from 'lucide-react';
+import { useState } from "react";
+import type { KeyboardEvent } from "react";
+import { Button } from "../ui/button";
+import { Textarea } from "../ui/textarea";
+import { Send, Loader2 } from "lucide-react";
 
 interface ChatInputProps {
   onSendMessage: (message: string) => void;
@@ -10,30 +10,30 @@ interface ChatInputProps {
   placeholder?: string;
 }
 
-export function ChatInput({ 
-  onSendMessage, 
-  disabled = false, 
-  placeholder = "Type your message..." 
+export function ChatInput({
+  onSendMessage,
+  disabled = false,
+  placeholder = "Type your message...",
 }: ChatInputProps) {
-  const [message, setMessage] = useState('');
+  const [message, setMessage] = useState("");
 
   const handleSend = () => {
     const trimmedMessage = message.trim();
     if (trimmedMessage && !disabled) {
       onSendMessage(trimmedMessage);
-      setMessage('');
+      setMessage("");
     }
   };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   };
 
   return (
-    <div className="flex gap-2 p-3 sm:p-4 border-t bg-background">
+    <div className="flex gap-2 p-3 sm:p-4 bg-background">
       <div className="flex-1">
         <Textarea
           value={message}
@@ -52,9 +52,9 @@ export function ChatInput({
         className="h-[50px] w-[50px] sm:h-[60px] sm:w-[60px]"
       >
         {disabled ? (
-          <Loader2 className="h-3 w-3 sm:h-4 sm:w-4 animate-spin" />
+          <Loader2 className="w-3 h-3 animate-spin sm:h-4 sm:w-4" />
         ) : (
-          <Send className="h-3 w-3 sm:h-4 sm:w-4" />
+          <Send className="w-3 h-3 sm:h-4 sm:w-4" />
         )}
       </Button>
     </div>
