@@ -167,8 +167,8 @@ GUIDELINES:
         throw new Error('No analysis response received');
       }
 
-      // Parse JSON response
-      const analysis = JSON.parse(analysisText);
+      // Parse JSON response (handle markdown code blocks)
+      const analysis = this.parseJsonFromResponse(analysisText);
       
       return {
         currentIntent: analysis.currentIntent,
@@ -193,6 +193,35 @@ GUIDELINES:
         compressedContext: 'Context analysis unavailable',
         analysisResult: { error: error instanceof Error ? error.message : 'Unknown error' },
       };
+    }
+  }
+
+  private parseJsonFromResponse(responseText: string): any {
+    try {
+      // First try to parse directly
+      return JSON.parse(responseText);
+    } catch (error) {
+      // If direct parsing fails, try to extract JSON from markdown code blocks
+      const jsonMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+      if (jsonMatch && jsonMatch[1]) {
+        try {
+          return JSON.parse(jsonMatch[1]);
+        } catch (innerError) {
+          throw new Error(`Failed to parse JSON from markdown block: ${innerError instanceof Error ? innerError.message : 'Unknown error'}`);
+        }
+      }
+      
+      // Try to find JSON object without markdown wrapper
+      const jsonObjectMatch = responseText.match(/\{[\s\S]*\}/);
+      if (jsonObjectMatch) {
+        try {
+          return JSON.parse(jsonObjectMatch[0]);
+        } catch (innerError) {
+          throw new Error(`Failed to parse extracted JSON object: ${innerError instanceof Error ? innerError.message : 'Unknown error'}`);
+        }
+      }
+      
+      throw new Error(`No valid JSON found in response: ${responseText.substring(0, 200)}...`);
     }
   }
 
