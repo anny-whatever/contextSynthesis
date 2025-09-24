@@ -25,12 +25,6 @@ export function CostCounter({ conversation, onRefresh }: CostCounterProps) {
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const formatCost = (cost: number): string => {
-    if (cost === 0) return "$0.00";
-    if (cost < 0.01) return `$${cost.toFixed(4)}`;
-    return `$${cost.toFixed(2)}`;
-  };
-
   const formatTokens = (tokens: number): string => {
     if (tokens >= 1000000) {
       return `${(tokens / 1000000).toFixed(1)}M`;
@@ -85,7 +79,7 @@ export function CostCounter({ conversation, onRefresh }: CostCounterProps) {
   return (
     <div className="flex gap-3 items-center text-xs text-muted-foreground">
       <div className="flex gap-1 items-center">
-        <span className="font-mono">{formatCost(costData.totalCost)}</span>
+        <span className="font-mono">${costData.totalCost}</span>
       </div>
       <div className="flex gap-2 items-center">
         <span>Tokens: {formatTokens(costData.totalTokens)}</span>

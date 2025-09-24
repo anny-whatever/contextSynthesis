@@ -11,7 +11,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../ui/dialog";
-import { AlertCircle, Plus, MessageSquare } from "lucide-react";
+import { AlertCircle, Plus, MessageSquare, Trash2 } from "lucide-react";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { CostCounter } from "./CostCounter";
@@ -85,7 +85,7 @@ export function ChatContainer() {
       const response = await ChatApiService.getConversationMessages(
         selectedConversation.id
       );
-      setMessages(response.data.messages.reverse()); // Reverse to show oldest first
+      setMessages(response.data.messages); // Server already returns in correct order (oldest first)
       setIsModalOpen(false);
     } catch (err) {
       setError(
@@ -93,6 +93,32 @@ export function ChatContainer() {
       );
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const deleteConversation = async (conversationId: string, event: React.MouseEvent) => {
+    event.stopPropagation(); // Prevent triggering selectConversation
+    
+    if (!confirm("Are you sure you want to delete this conversation? This action cannot be undone.")) {
+      return;
+    }
+
+    try {
+      setError(null);
+      await ChatApiService.deleteConversation(conversationId);
+      
+      // If the deleted conversation is currently selected, clear it
+      if (conversation?.id === conversationId) {
+        setConversation(null);
+        setMessages([]);
+      }
+      
+      // Refresh the conversations list
+      loadUserConversations();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to delete conversation"
+      );
     }
   };
 
@@ -196,11 +222,23 @@ export function ChatContainer() {
                           }`}
                           onClick={() => selectConversation(conv)}
                         >
-                          <div className="text-sm font-medium">
-                            {conv.title}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {new Date(conv.createdAt).toLocaleDateString()}
+                          <div className="flex justify-between items-start">
+                            <div className="flex-1">
+                              <div className="text-sm font-medium">
+                                {conv.title}
+                              </div>
+                              <div className="text-xs text-muted-foreground">
+                                {new Date(conv.createdAt).toLocaleDateString()}
+                              </div>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-muted-foreground hover:text-destructive"
+                              onClick={(e) => deleteConversation(conv.id, e)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </div>
                         </Card>
                       ))}

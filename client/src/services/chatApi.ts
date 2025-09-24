@@ -54,12 +54,18 @@ export class ChatApiService {
   }
 
   static async getUserConversations(
-    userId = 'anonymous',
-    limit = 20,
+    userId: string,
+    limit = 10,
     offset = 0
   ): Promise<{ success: boolean; data: { conversations: Conversation[]; pagination: any } }> {
     return this.request<{ success: boolean; data: { conversations: Conversation[]; pagination: any } }>(
       `/chat/user/${userId}/conversations?limit=${limit}&offset=${offset}`
     );
+  }
+
+  static async deleteConversation(conversationId: string): Promise<{ success: boolean; message: string }> {
+    return this.request<{ success: boolean; message: string }>(`/chat/conversations/${conversationId}`, {
+      method: 'DELETE',
+    });
   }
 }
