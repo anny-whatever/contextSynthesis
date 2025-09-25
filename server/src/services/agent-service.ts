@@ -517,6 +517,12 @@ Use this context to provide more relevant and focused responses that align with 
             orderBy: { createdAt: "asc" },
             include: {
               toolUsages: true,
+              summary: {
+                select: {
+                  summaryText: true,
+                  keyTopics: true,
+                },
+              },
             },
           },
         },
@@ -540,7 +546,9 @@ Use this context to provide more relevant and focused responses that align with 
         (msg) => ({
           id: msg.id,
           role: msg.role,
-          content: msg.content,
+          content: msg.summaryId && msg.summary 
+            ? `[SUMMARY] ${msg.summary.summaryText}` 
+            : msg.content,
           timestamp: msg.createdAt,
           toolUsages: msg.toolUsages.map((usage) => ({
             toolName: usage.toolName,
@@ -550,6 +558,7 @@ Use this context to provide more relevant and focused responses that align with 
             duration: usage.duration || 0,
             error: usage.error || undefined,
           })),
+          isSummary: !!msg.summaryId,
         })
       );
 

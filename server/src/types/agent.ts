@@ -23,6 +23,7 @@ export interface MessageContext {
   content: string;
   timestamp: Date;
   toolUsages?: ToolUsageContext[];
+  isSummary?: boolean;
 }
 
 export interface ToolUsageContext {

@@ -92,6 +92,8 @@ export function ContextSidebar({
         return "bg-purple-100 text-purple-800";
       case "ACTION_ITEMS":
         return "bg-orange-100 text-orange-800";
+      case "UNKNOWN":
+        return "bg-red-100 text-red-800";
       default:
         return "bg-gray-100 text-gray-800";
     }
@@ -336,10 +338,10 @@ export function ContextSidebar({
                           <div className="flex justify-between items-center">
                             <Badge
                               className={getSummaryTypeColor(
-                                summary.summaryType
+                                summary.summaryType || "UNKNOWN"
                               )}
                             >
-                              {summary.summaryType.replace("_", " ")}
+                              {(summary.summaryType || "UNKNOWN").replace("_", " ")}
                             </Badge>
                           </div>
 

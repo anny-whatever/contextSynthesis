@@ -250,7 +250,8 @@ GUIDELINES:
     summary: SummaryResult,
     messages: MessageForSummary[]
   ): Promise<void> {
-    await this.prisma.conversationSummary.create({
+    // Create the summary first
+    const createdSummary = await this.prisma.conversationSummary.create({
       data: {
         conversationId,
         summaryText: summary.summaryText,
@@ -259,6 +260,28 @@ GUIDELINES:
         summaryLevel: summary.summaryLevel,
       },
     });
+
+    // Update all messages in the range to point to this summary
+    if (messages.length > 0) {
+      const startDate = messages[0]!.createdAt;
+      const endDate = messages[messages.length - 1]!.createdAt;
+
+      await this.prisma.message.updateMany({
+        where: {
+          conversationId,
+          createdAt: {
+            gte: startDate,
+            lte: endDate,
+          },
+          summaryId: null, // Only update messages that don't already have a summaryId
+        },
+        data: {
+          summaryId: createdSummary.id,
+        },
+      });
+
+      console.log(`📝 [SUMMARY] Linked ${messages.length} messages to summary ${createdSummary.id}`);
+    }
   }
 
   async getAllSummaries(conversationId: string): Promise<SummaryResult[]> {

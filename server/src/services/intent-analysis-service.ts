@@ -18,6 +18,7 @@ export interface ConversationContext {
     role: string;
     content: string;
     createdAt: Date;
+    isSummary?: boolean;
   }>;
   summaries: Array<{
     summaryText: string;
@@ -60,7 +61,7 @@ export class IntentAnalysisService {
   }
 
   private async loadConversationContext(conversationId: string): Promise<ConversationContext> {
-    // Load recent messages (last 20 to have enough context)
+    // Load recent messages (last 20 to have enough context) with summary information
     const messages = await this.prisma.message.findMany({
       where: { conversationId },
       orderBy: { createdAt: 'desc' },
@@ -70,10 +71,17 @@ export class IntentAnalysisService {
         role: true,
         content: true,
         createdAt: true,
+        summaryId: true,
+        summary: {
+          select: {
+            summaryText: true,
+            keyTopics: true,
+          },
+        },
       },
     });
 
-    // Load conversation summaries
+    // Load conversation summaries for additional context
     const summaries = await this.prisma.conversationSummary.findMany({
       where: { conversationId },
       orderBy: { createdAt: 'desc' },
@@ -97,8 +105,19 @@ export class IntentAnalysisService {
       },
     });
 
+    // Transform messages to use summaries when available
+    const transformedMessages = messages.reverse().map(msg => ({
+      id: msg.id,
+      role: msg.role,
+      content: msg.summaryId && msg.summary 
+        ? `[SUMMARY] ${msg.summary.summaryText}` 
+        : msg.content,
+      createdAt: msg.createdAt,
+      isSummary: !!msg.summaryId,
+    }));
+
     const context: ConversationContext = {
-      messages: messages.reverse(), // Reverse to get chronological order
+      messages: transformedMessages,
       summaries
     };
 
