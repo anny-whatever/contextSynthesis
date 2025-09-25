@@ -58,8 +58,8 @@ if (process.env.NODE_ENV !== 'test') {
 // Input sanitization
 app.use(sanitizeInput);
 
-// Rate limiting
-app.use('/api', apiLimiter);
+// Rate limiting - DISABLED
+// app.use('/api', apiLimiter);
 
 // Health check endpoint
 app.get('/health', (req, res) => {

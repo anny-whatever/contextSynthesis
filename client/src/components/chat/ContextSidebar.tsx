@@ -11,14 +11,30 @@ import type { Summary, IntentAnalysis } from "../../types/chat";
 
 interface ContextSidebarProps {
   conversationId: string | null;
+  realtimeIntentAnalysis?: IntentAnalysis | null;
+  realtimeSummaries?: Summary[];
+  isPingingActive?: boolean;
+  pingError?: string | null;
 }
 
-export function ContextSidebar({ conversationId }: ContextSidebarProps) {
+export function ContextSidebar({ 
+  conversationId, 
+  realtimeIntentAnalysis, 
+  realtimeSummaries = [], 
+  isPingingActive = false, 
+  pingError 
+}: ContextSidebarProps) {
   const [summaries, setSummaries] = useState<Summary[]>([]);
   const [intentAnalyses, setIntentAnalyses] = useState<IntentAnalysis[]>([]);
   const [isLoadingSummaries, setIsLoadingSummaries] = useState(false);
   const [isLoadingIntents, setIsLoadingIntents] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Merge real-time data with existing data
+  const displaySummaries = realtimeSummaries.length > 0 ? realtimeSummaries : summaries;
+  const displayIntentAnalyses = realtimeIntentAnalysis 
+    ? [realtimeIntentAnalysis, ...intentAnalyses.filter(ia => ia.id !== realtimeIntentAnalysis.id)]
+    : intentAnalyses;
 
   useEffect(() => {
     if (conversationId) {
@@ -112,11 +128,20 @@ export function ContextSidebar({ conversationId }: ContextSidebarProps) {
         </CardTitle>
       </CardHeader>
       <CardContent className="p-0">
-        {error && (
+        {(error || pingError) && (
           <Alert variant="destructive" className="m-4">
             <AlertCircle className="w-4 h-4" />
-            <AlertDescription>{error}</AlertDescription>
+            <AlertDescription>{error || pingError}</AlertDescription>
           </Alert>
+        )}
+
+        {isPingingActive && (
+          <div className="mx-4 mb-2">
+            <Badge variant="outline" className="text-xs">
+              <Clock className="w-3 h-3 mr-1" />
+              Live Updates Active
+            </Badge>
+          </div>
         )}
 
         <Tabs defaultValue="intent" className="h-full">
@@ -146,12 +171,12 @@ export function ContextSidebar({ conversationId }: ContextSidebarProps) {
                       </Card>
                     ))}
                   </div>
-                ) : intentAnalyses.length === 0 ? (
+                ) : displayIntentAnalyses.length === 0 ? (
                   <div className="py-8 text-center text-muted-foreground">
                     <p>No intent analyses found</p>
                   </div>
                 ) : (
-                  intentAnalyses.map((analysis) => {
+                  displayIntentAnalyses.map((analysis) => {
                     const result = analysis.analysisResult || {};
                     return (
                       <Card
@@ -296,12 +321,12 @@ export function ContextSidebar({ conversationId }: ContextSidebarProps) {
                       </Card>
                     ))}
                   </div>
-                ) : summaries.length === 0 ? (
+                ) : displaySummaries.length === 0 ? (
                   <div className="py-8 text-center text-muted-foreground">
                     <p>No summaries found</p>
                   </div>
                 ) : (
-                  summaries.map((summary) => (
+                  displaySummaries.map((summary) => (
                     <Card
                       key={summary.id}
                       className="border-l-4 border-l-green-500"

@@ -88,4 +88,22 @@ export class ChatApiService {
       `/chat/conversations/${conversationId}/intent-analyses?limit=${limit}&offset=${offset}`
     );
   }
+
+  // New methods for pinging mechanism
+  static async getLatestIntentAnalysis(
+    conversationId: string
+  ): Promise<{ success: boolean; data: { intentAnalyses: IntentAnalysis[]; pagination: any } }> {
+    return this.request<{ success: boolean; data: { intentAnalyses: IntentAnalysis[]; pagination: any } }>(
+      `/chat/conversations/${conversationId}/intent-analyses?limit=1`
+    );
+  }
+
+  static async getLatestSummaries(
+    conversationId: string,
+    limit = 5
+  ): Promise<{ success: boolean; data: { summaries: Summary[]; total: number } }> {
+    return this.request<{ success: boolean; data: { summaries: Summary[]; total: number } }>(
+      `/chat/conversations/${conversationId}/summaries?limit=${limit}`
+    );
+  }
 }

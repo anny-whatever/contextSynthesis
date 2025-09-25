@@ -17,6 +17,7 @@ import { ChatInput } from "./ChatInput";
 import { CostCounter } from "./CostCounter";
 import { ContextSidebar } from "./ContextSidebar";
 import { ChatApiService } from "../../services/chatApi";
+import { usePingMechanism } from "../../hooks/usePingMechanism";
 import type { Message, Conversation } from "../../types/chat";
 
 export function ChatContainer() {
@@ -29,6 +30,17 @@ export function ChatContainer() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const userId = "anonymous";
+
+  // Initialize pinging mechanism
+  const pingMechanism = usePingMechanism({
+    conversationId: conversation?.id || null,
+    onUserMessage: () => {
+      console.log("🔄 [PING] Started pinging after user message");
+    },
+    onAssistantMessage: () => {
+      console.log("🔄 [PING] Will stop pinging in 5 seconds after assistant message");
+    },
+  });
 
   // Auto-scroll to bottom when new messages are added
   useEffect(() => {
@@ -146,6 +158,9 @@ export function ChatContainer() {
     setIsLoading(true);
     setError(null);
 
+    // Trigger pinging mechanism after user message
+    pingMechanism.handleUserMessage();
+
     try {
       // Send message to backend
       const response = await ChatApiService.sendMessage({
@@ -162,10 +177,15 @@ export function ChatContainer() {
         toolUsages: response.data.toolsUsed,
       };
       setMessages((prev) => [...prev, assistantMessage]);
+
+      // Trigger pinging mechanism after assistant message (will stop after 5 seconds)
+      pingMechanism.handleAssistantMessage();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to send message");
       // Remove the user message if sending failed
       setMessages((prev) => prev.slice(0, -1));
+      // Stop pinging if message failed
+      pingMechanism.stopPinging();
     } finally {
       setIsLoading(false);
     }
@@ -334,7 +354,13 @@ export function ChatContainer() {
 
       {/* Context Sidebar */}
       <div className="border-l">
-        <ContextSidebar conversationId={conversation?.id || null} />
+        <ContextSidebar 
+          conversationId={conversation?.id || null}
+          realtimeIntentAnalysis={pingMechanism.latestIntentAnalysis}
+          realtimeSummaries={pingMechanism.latestSummaries}
+          isPingingActive={pingMechanism.isActive}
+          pingError={pingMechanism.error}
+        />
       </div>
     </div>
   );
