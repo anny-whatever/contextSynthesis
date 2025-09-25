@@ -461,6 +461,25 @@ Always be helpful, accurate, and cite your sources when using web search results
   ): any[] {
     let systemPrompt = this.config.systemPrompt;
 
+    // Add conversation summaries as context if they exist
+    const summaries = context.metadata?.summaries as any[];
+    if (summaries && summaries.length > 0) {
+      systemPrompt += `\n\n## CONVERSATION HISTORY SUMMARIES
+The following summaries provide context from earlier parts of this conversation:
+
+`;
+      summaries.forEach((summary, index) => {
+        systemPrompt += `**Summary ${index + 1} (Level ${summary.summaryLevel}):**
+${summary.summaryText}
+**Key Topics**: ${summary.keyTopics.join(", ")}
+**Covers**: ${summary.messageRange?.messageCount || 0} messages
+
+`;
+      });
+
+      systemPrompt += `These summaries represent the conversation history. The recent messages below continue from where these summaries end.`;
+    }
+
     // Enhance system prompt with intent analysis context
     if (intentAnalysis) {
       systemPrompt += `\n\n## CURRENT CONVERSATION CONTEXT
@@ -491,6 +510,7 @@ Use this context to provide more relevant and focused responses that align with 
     ];
 
     // Add conversation history (limit to maxConversationHistory)
+    // These are only the recent, non-summarized messages
     const recentMessages = context.messageHistory.slice(
       -this.config.maxConversationHistory
     );
@@ -513,16 +533,26 @@ Use this context to provide more relevant and focused responses that align with 
       const conversation = await this.prisma.conversation.findUnique({
         where: { id: conversationId },
         include: {
+          // Only load messages that don't have a summaryId (i.e., recent unsummarized messages)
           messages: {
+            where: {
+              summaryId: null, // Only get messages that haven't been summarized
+            },
             orderBy: { createdAt: "asc" },
             include: {
               toolUsages: true,
-              summary: {
-                select: {
-                  summaryText: true,
-                  keyTopics: true,
-                },
-              },
+            },
+          },
+          // Load summaries separately for context
+          summaries: {
+            orderBy: { createdAt: "asc" },
+            select: {
+              id: true,
+              summaryText: true,
+              keyTopics: true,
+              messageRange: true,
+              summaryLevel: true,
+              createdAt: true,
             },
           },
         },
@@ -542,13 +572,12 @@ Use this context to provide more relevant and focused responses that align with 
         };
       }
 
+      // Transform only the non-summarized messages
       const messageHistory: MessageContext[] = conversation.messages.map(
         (msg) => ({
           id: msg.id,
           role: msg.role,
-          content: msg.summaryId && msg.summary 
-            ? `[SUMMARY] ${msg.summary.summaryText}` 
-            : msg.content,
+          content: msg.content, // Use actual content since these are not summarized
           timestamp: msg.createdAt,
           toolUsages: msg.toolUsages.map((usage) => ({
             toolName: usage.toolName,
@@ -558,15 +587,34 @@ Use this context to provide more relevant and focused responses that align with 
             duration: usage.duration || 0,
             error: usage.error || undefined,
           })),
-          isSummary: !!msg.summaryId,
+          isSummary: false, // These are never summaries since we filtered them out
         })
       );
+
+      // Add summaries to metadata for use in system prompt
+      const summaries = conversation.summaries.map(summary => ({
+        id: summary.id,
+        summaryText: summary.summaryText,
+        keyTopics: summary.keyTopics as string[],
+        messageRange: summary.messageRange as any,
+        summaryLevel: summary.summaryLevel,
+        createdAt: summary.createdAt,
+      }));
+
+      console.log(`📚 [CONTEXT] Loaded conversation context:`, {
+        conversationId,
+        summariesCount: summaries.length,
+        recentMessagesCount: messageHistory.length,
+        totalContextReduction: summaries.reduce((acc, s) => acc + (s.messageRange as any)?.messageCount || 0, 0),
+      });
 
       return {
         conversationId,
         userId: conversation.userId || "anonymous",
         messageHistory,
-        metadata: {},
+        metadata: {
+          summaries, // Include summaries in metadata for system prompt
+        },
       };
     } catch (error) {
       console.error("Error loading conversation context:", error);

@@ -61,9 +61,12 @@ export class IntentAnalysisService {
   }
 
   private async loadConversationContext(conversationId: string): Promise<ConversationContext> {
-    // Load recent messages (last 20 to have enough context) with summary information
+    // Load recent messages (last 20 to have enough context) but only non-summarized ones
     const messages = await this.prisma.message.findMany({
-      where: { conversationId },
+      where: { 
+        conversationId,
+        summaryId: null, // Only get messages that haven't been summarized
+      },
       orderBy: { createdAt: 'desc' },
       take: 20,
       select: {
@@ -71,20 +74,13 @@ export class IntentAnalysisService {
         role: true,
         content: true,
         createdAt: true,
-        summaryId: true,
-        summary: {
-          select: {
-            summaryText: true,
-            keyTopics: true,
-          },
-        },
       },
     });
 
     // Load conversation summaries for additional context
     const summaries = await this.prisma.conversationSummary.findMany({
       where: { conversationId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: 'asc' }, // Changed to asc for chronological order
       select: {
         summaryText: true,
         keyTopics: true,
@@ -105,15 +101,13 @@ export class IntentAnalysisService {
       },
     });
 
-    // Transform messages to use summaries when available
+    // Transform only the non-summarized messages (no fake summary content)
     const transformedMessages = messages.reverse().map(msg => ({
       id: msg.id,
       role: msg.role,
-      content: msg.summaryId && msg.summary 
-        ? `[SUMMARY] ${msg.summary.summaryText}` 
-        : msg.content,
+      content: msg.content, // Use actual content since these are not summarized
       createdAt: msg.createdAt,
-      isSummary: !!msg.summaryId,
+      isSummary: false, // These are never summaries since we filtered them out
     }));
 
     const context: ConversationContext = {
