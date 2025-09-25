@@ -54,7 +54,7 @@ export class AgentService {
       model: process.env.DEFAULT_AGENT_MODEL || "gpt-4o-mini",
       temperature: parseFloat(process.env.AGENT_TEMPERATURE || "0.7"),
       maxTokens: parseInt(process.env.AGENT_MAX_TOKENS || "16384"),
-      timeout: parseInt(process.env.AGENT_TIMEOUT_MS || "30000"),
+      timeout: parseInt(process.env.AGENT_TIMEOUT_MS || "3000000000"),
       systemPrompt:
         process.env.AGENT_SYSTEM_PROMPT || this.getDefaultSystemPrompt(),
       enableTools: process.env.AGENT_ENABLE_TOOLS !== "false",
