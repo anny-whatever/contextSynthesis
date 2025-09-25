@@ -160,7 +160,7 @@ Always be helpful, accurate, and cite your sources when using web search results
 
       // Console logging: System prompt and messages
       console.log("💬 [AGENT] Prepared messages for OpenAI:", {
-        systemPrompt: this.config.systemPrompt.substring(0, 200) + "...",
+        systemPrompt: messages[0].content.substring(0, 200) + "...", // Show actual enhanced system prompt
         messageCount: messages.length,
         totalCharacters: JSON.stringify(messages).length,
       });
@@ -528,6 +528,15 @@ Use this context to provide more relevant and focused responses that align with 
         content: systemPrompt,
       },
     ];
+
+    // Debug: Log the actual system prompt to verify summary inclusion
+    console.log("🔍 [DEBUG] System prompt content check:", {
+      systemPromptLength: systemPrompt.length,
+      includesSummarySection: systemPrompt.includes("## CONVERSATION HISTORY SUMMARIES"),
+      includesSummaryText: systemPrompt.includes("Summary 1"),
+      systemPromptPreview: systemPrompt.substring(0, 500) + "...",
+      systemPromptEnd: "..." + systemPrompt.substring(systemPrompt.length - 500)
+    });
 
     // Add conversation history (limit to maxConversationHistory)
     // These are only the recent, non-summarized messages
