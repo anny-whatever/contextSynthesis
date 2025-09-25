@@ -57,10 +57,14 @@ export interface ChatRequest {
 export interface Summary {
   id: string;
   conversationId: string;
-  summaryType: 'CONVERSATION' | 'TOPIC' | 'DECISION' | 'ACTION_ITEMS';
-  content: string;
-  keyPoints: string[];
-  relevantMessageIds: string[];
+  summaryText: string;
+  keyTopics: string[];
+  messageRange: {
+    startMessageId: string;
+    endMessageId: string;
+    messageCount: number;
+  };
+  summaryLevel: number;
   createdAt: Date;
   updatedAt: Date;
 }

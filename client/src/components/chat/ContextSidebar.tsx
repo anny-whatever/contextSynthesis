@@ -82,20 +82,16 @@ export function ContextSidebar({
     }
   };
 
-  const getSummaryTypeColor = (type: string) => {
-    switch (type) {
-      case "CONVERSATION":
-        return "bg-blue-100 text-blue-800";
-      case "TOPIC":
-        return "bg-green-100 text-green-800";
-      case "DECISION":
-        return "bg-purple-100 text-purple-800";
-      case "ACTION_ITEMS":
-        return "bg-orange-100 text-orange-800";
-      case "UNKNOWN":
-        return "bg-red-100 text-red-800";
+  const getSummaryLevelColor = (level: number) => {
+    switch (level) {
+      case 1:
+        return "bg-blue-50 text-blue-700 border-blue-200";
+      case 2:
+        return "bg-purple-50 text-purple-700 border-purple-200";
+      case 3:
+        return "bg-orange-50 text-orange-700 border-orange-200";
       default:
-        return "bg-gray-100 text-gray-800";
+        return "bg-gray-50 text-gray-700 border-gray-200";
     }
   };
 
@@ -331,45 +327,64 @@ export function ContextSidebar({
                   displaySummaries.map((summary) => (
                     <Card
                       key={summary.id}
-                      className="border-l-4 border-l-green-500"
+                      className="border-l-4 border-l-blue-500"
                     >
                       <CardContent className="p-4">
                         <div className="space-y-3">
-                          <div className="flex justify-between items-center">
+                          {/* Header with Summary Level and Message Count */}
+                          <div className="flex justify-between items-start gap-2">
                             <Badge
-                              className={getSummaryTypeColor(
-                                summary.summaryType || "UNKNOWN"
-                              )}
+                              variant="outline"
+                              className={`text-xs px-2 py-0.5 h-auto ${getSummaryLevelColor(summary.summaryLevel)}`}
                             >
-                              {(summary.summaryType || "UNKNOWN").replace("_", " ")}
+                              Level {summary.summaryLevel}
+                              {summary.summaryLevel === 1 ? " (Original)" : " (Meta)"}
+                            </Badge>
+                            <Badge variant="secondary" className="text-xs px-2 py-0.5 h-auto">
+                              {summary.messageRange.messageCount} messages
                             </Badge>
                           </div>
 
+                          {/* Summary Text */}
                           <div>
-                            <h4 className="mb-2 text-sm font-semibold">
+                            <h4 className="text-xs font-medium text-muted-foreground mb-1">
                               Summary
                             </h4>
-                            <p className="text-sm text-muted-foreground">
-                              {summary.content}
+                            <p className="text-sm text-muted-foreground leading-tight">
+                              {summary.summaryText}
                             </p>
                           </div>
 
-                          {(summary.keyPoints?.length || 0) > 0 && (
+                          {/* Key Topics */}
+                          {summary.keyTopics?.length > 0 && (
                             <div>
-                              <h4 className="mb-2 text-sm font-semibold">
-                                Key Points
+                              <h4 className="text-xs font-medium text-muted-foreground mb-1">
+                                Topics
                               </h4>
-                              <ul className="space-y-1 text-xs text-muted-foreground">
-                                {(summary.keyPoints || []).map((point, index) => (
-                                  <li key={index}>• {point}</li>
+                              <div className="flex flex-wrap gap-1">
+                                {summary.keyTopics.map((topic: string, index: number) => (
+                                  <Badge
+                                    key={index}
+                                    variant="secondary"
+                                    className="text-xs px-2 py-0.5 h-auto"
+                                  >
+                                    {topic}
+                                  </Badge>
                                 ))}
-                              </ul>
+                              </div>
                             </div>
                           )}
 
-                          <div className="flex gap-2 items-center pt-2 text-xs border-t text-muted-foreground">
-                            <Clock className="w-3 h-3" />
-                            {formatDate(summary.createdAt)}
+                          {/* Message Range Info */}
+                          <div className="flex items-center justify-between text-xs text-muted-foreground">
+                            <div className="flex items-center gap-1">
+                              <Target className="w-3 h-3" />
+                              <span>Range: {summary.messageRange.messageCount} msgs</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Clock className="w-3 h-3" />
+                              {formatDate(summary.createdAt)}
+                            </div>
                           </div>
                         </div>
                       </CardContent>
