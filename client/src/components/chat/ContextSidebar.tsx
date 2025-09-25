@@ -354,13 +354,13 @@ export function ContextSidebar({
                             </p>
                           </div>
 
-                          {summary.keyPoints.length > 0 && (
+                          {(summary.keyPoints?.length || 0) > 0 && (
                             <div>
                               <h4 className="mb-2 text-sm font-semibold">
                                 Key Points
                               </h4>
                               <ul className="space-y-1 text-xs text-muted-foreground">
-                                {summary.keyPoints.map((point, index) => (
+                                {(summary.keyPoints || []).map((point, index) => (
                                   <li key={index}>• {point}</li>
                                 ))}
                               </ul>
