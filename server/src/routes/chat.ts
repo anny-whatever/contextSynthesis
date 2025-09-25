@@ -376,18 +376,6 @@ router.get(
       orderBy: { createdAt: "desc" },
       take: Number(limit),
       skip: Number(offset),
-      select: {
-        conversationId: true,
-        userMessageId: true,
-        currentIntent: true,
-        contextualRelevance: true,
-        relationshipToHistory: true,
-        keyTopics: true,
-        pendingQuestions: true,
-        lastAssistantQuestion: true,
-        analysisResult: true,
-        createdAt: true,
-      },
       include: {
         userMessage: {
           select: {

@@ -53,3 +53,33 @@ export interface ChatRequest {
   userId?: string;
   context?: Record<string, any>;
 }
+
+export interface Summary {
+  id: string;
+  conversationId: string;
+  summaryType: 'CONVERSATION' | 'TOPIC' | 'DECISION' | 'ACTION_ITEMS';
+  content: string;
+  keyPoints: string[];
+  relevantMessageIds: string[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface IntentAnalysis {
+  id: string;
+  conversationId: string;
+  userMessageId: string;
+  currentIntent: string;
+  contextualRelevance: number;
+  relationshipToHistory: string;
+  keyTopics: string[];
+  pendingQuestions: string[];
+  lastAssistantQuestion?: string;
+  analysisResult: any;
+  createdAt: Date;
+  updatedAt: Date;
+  userMessage?: {
+    content: string;
+    createdAt: Date;
+  };
+}

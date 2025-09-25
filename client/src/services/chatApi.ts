@@ -1,4 +1,4 @@
-import type { ChatRequest, ChatResponse, Conversation, Message } from '../types/chat';
+import type { ChatRequest, ChatResponse, Conversation, Message, Summary, IntentAnalysis } from '../types/chat';
 
 const API_BASE_URL = 'http://localhost:3001/api';
 
@@ -67,5 +67,25 @@ export class ChatApiService {
     return this.request<{ success: boolean; message: string }>(`/chat/conversations/${conversationId}`, {
       method: 'DELETE',
     });
+  }
+
+  static async getConversationSummaries(
+    conversationId: string,
+    limit = 10,
+    offset = 0
+  ): Promise<{ success: boolean; data: { summaries: Summary[]; pagination: any } }> {
+    return this.request<{ success: boolean; data: { summaries: Summary[]; pagination: any } }>(
+      `/chat/conversations/${conversationId}/summaries?limit=${limit}&offset=${offset}`
+    );
+  }
+
+  static async getConversationIntentAnalyses(
+    conversationId: string,
+    limit = 10,
+    offset = 0
+  ): Promise<{ success: boolean; data: { intentAnalyses: IntentAnalysis[]; pagination: any } }> {
+    return this.request<{ success: boolean; data: { intentAnalyses: IntentAnalysis[]; pagination: any } }>(
+      `/chat/conversations/${conversationId}/intent-analyses?limit=${limit}&offset=${offset}`
+    );
   }
 }

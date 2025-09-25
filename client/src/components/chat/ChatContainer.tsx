@@ -15,6 +15,7 @@ import { AlertCircle, Plus, MessageSquare, Trash2 } from "lucide-react";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { CostCounter } from "./CostCounter";
+import { ContextSidebar } from "./ContextSidebar";
 import { ChatApiService } from "../../services/chatApi";
 import type { Message, Conversation } from "../../types/chat";
 
@@ -171,7 +172,9 @@ export function ChatContainer() {
   };
 
   return (
-    <div className="flex flex-col mx-auto w-full max-w-4xl h-screen">
+    <div className="flex w-full h-screen max-w-7xl mx-auto">
+      {/* Main Chat Area */}
+      <div className="flex flex-col flex-1 min-w-0">
       {/* Header */}
       <div className="p-3 border-b sm:p-4 bg-background">
         <div className="flex justify-between items-center mb-3">
@@ -327,6 +330,12 @@ export function ChatContainer() {
             : "Type your message... (Press Enter to send, Shift+Enter for new line)"
         }
       />
+      </div>
+
+      {/* Context Sidebar */}
+      <div className="border-l">
+        <ContextSidebar conversationId={conversation?.id || null} />
+      </div>
     </div>
   );
 }

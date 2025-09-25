@@ -53,7 +53,7 @@ export class AgentService {
     this.config = {
       model: process.env.DEFAULT_AGENT_MODEL || "gpt-4o-mini",
       temperature: parseFloat(process.env.AGENT_TEMPERATURE || "0.7"),
-      maxTokens: parseInt(process.env.AGENT_MAX_TOKENS || "20000"),
+      maxTokens: parseInt(process.env.AGENT_MAX_TOKENS || "16384"),
       timeout: parseInt(process.env.AGENT_TIMEOUT_MS || "30000"),
       systemPrompt:
         process.env.AGENT_SYSTEM_PROMPT || this.getDefaultSystemPrompt(),
