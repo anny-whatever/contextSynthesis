@@ -17,7 +17,7 @@ const agentService = new AgentService();
 // POST /api/chat - Send a message and get AI response
 router.post(
   "/",
-  chatLimiter,
+  // chatLimiter, // DISABLED
   validateChatRequest,
   asyncHandler(async (req: Request, res: Response) => {
     const { message, conversationId, userId, context } = req.body;

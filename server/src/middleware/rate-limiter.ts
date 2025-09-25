@@ -1,7 +1,7 @@
 import rateLimit from 'express-rate-limit';
 import { Request, Response } from 'express';
 
-// General API rate limiter
+// General API rate limiter - DISABLED
 export const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: parseInt(process.env.RATE_LIMIT_REQUESTS || '100'), // limit each IP to 100 requests per windowMs
@@ -14,9 +14,10 @@ export const apiLimiter = rateLimit({
   },
   standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
   legacyHeaders: false, // Disable the `X-RateLimit-*` headers
+  skip: () => true, // ALWAYS SKIP - RATE LIMITING DISABLED
 });
 
-// Stricter rate limiter for chat endpoints
+// Stricter rate limiter for chat endpoints - DISABLED
 export const chatLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: parseInt(process.env.CHAT_RATE_LIMIT || '10'), // limit each IP to 10 chat requests per minute
@@ -29,17 +30,10 @@ export const chatLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  // Skip rate limiting for certain conditions
-  skip: (req: Request) => {
-    // Skip rate limiting in development
-    if (process.env.NODE_ENV === 'development') {
-      return true;
-    }
-    return false;
-  },
+  skip: () => true, // ALWAYS SKIP - RATE LIMITING DISABLED
 });
 
-// Very strict rate limiter for expensive operations
+// Very strict rate limiter for expensive operations - DISABLED
 export const expensiveOperationLimiter = rateLimit({
   windowMs: 60 * 60 * 1000, // 1 hour
   max: parseInt(process.env.EXPENSIVE_OPERATION_LIMIT || '5'), // limit each IP to 5 expensive operations per hour
@@ -52,4 +46,5 @@ export const expensiveOperationLimiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  skip: () => true, // ALWAYS SKIP - RATE LIMITING DISABLED
 });
