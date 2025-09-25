@@ -2,8 +2,14 @@ import OpenAI from "openai";
 import { PrismaClient, Role } from "@prisma/client";
 import { ToolRegistry } from "../tools/tool-registry";
 import { CostService, TokenUsage, WebSearchUsage } from "./cost-service";
-import { IntentAnalysisService, IntentAnalysisResult } from "./intent-analysis-service";
-import { ConversationSummaryService, SummaryResult } from "./conversation-summary-service";
+import {
+  IntentAnalysisService,
+  IntentAnalysisResult,
+} from "./intent-analysis-service";
+import {
+  ConversationSummaryService,
+  SummaryResult,
+} from "./conversation-summary-service";
 import {
   AgentConfig,
   AgentRequest,
@@ -35,13 +41,19 @@ export class AgentService {
 
     this.prisma = prisma || new PrismaClient();
     this.toolRegistry = toolRegistry || new ToolRegistry(this.prisma);
-    this.intentAnalysisService = new IntentAnalysisService(this.prisma, this.openai);
-    this.conversationSummaryService = new ConversationSummaryService(this.prisma, this.openai);
+    this.intentAnalysisService = new IntentAnalysisService(
+      this.prisma,
+      this.openai
+    );
+    this.conversationSummaryService = new ConversationSummaryService(
+      this.prisma,
+      this.openai
+    );
 
     this.config = {
       model: process.env.DEFAULT_AGENT_MODEL || "gpt-4o-mini",
       temperature: parseFloat(process.env.AGENT_TEMPERATURE || "0.7"),
-      maxTokens: parseInt(process.env.AGENT_MAX_TOKENS || "2000"),
+      maxTokens: parseInt(process.env.AGENT_MAX_TOKENS || "20000"),
       timeout: parseInt(process.env.AGENT_TIMEOUT_MS || "30000"),
       systemPrompt:
         process.env.AGENT_SYSTEM_PROMPT || this.getDefaultSystemPrompt(),
@@ -65,19 +77,19 @@ Always be helpful, accurate, and cite your sources when using web search results
     let conversationId = request.conversationId;
 
     // Console logging: Initial request
-    console.log('🚀 [AGENT] Processing new message request:', {
+    console.log("🚀 [AGENT] Processing new message request:", {
       timestamp: new Date().toISOString(),
-      conversationId: conversationId || 'NEW',
-      userId: request.userId || 'anonymous',
+      conversationId: conversationId || "NEW",
+      userId: request.userId || "anonymous",
       messageLength: request.message.length,
       hasContext: !!request.context,
-      options: request.options
+      options: request.options,
     });
 
     // Only create a new conversation if no conversationId is provided
     if (!conversationId) {
       conversationId = await this.createNewConversation(request.userId);
-      console.log('📝 [AGENT] Created new conversation:', { conversationId });
+      console.log("📝 [AGENT] Created new conversation:", { conversationId });
     }
 
     try {
@@ -87,10 +99,10 @@ Always be helpful, accurate, and cite your sources when using web search results
         request.userId
       );
 
-      console.log('📚 [AGENT] Loaded conversation context:', {
+      console.log("📚 [AGENT] Loaded conversation context:", {
         conversationId,
         messageHistoryCount: context.messageHistory.length,
-        userId: context.userId
+        userId: context.userId,
       });
 
       // Add user message to context
@@ -111,29 +123,32 @@ Always be helpful, accurate, and cite your sources when using web search results
       });
 
       // Perform intent analysis for every user message
-      console.log('🧠 [AGENT] Performing intent analysis for user message');
+      console.log("🧠 [AGENT] Performing intent analysis for user message");
       const intentAnalysis = await this.intentAnalysisService.analyzeIntent(
         conversationId,
         savedUserMessage.id,
         request.message
       );
 
-      console.log('🧠 [AGENT] Intent analysis completed:', {
+      console.log("🧠 [AGENT] Intent analysis completed:", {
         currentIntent: intentAnalysis.currentIntent,
         contextualRelevance: intentAnalysis.contextualRelevance,
         relationshipToHistory: intentAnalysis.relationshipToHistory,
-        keyTopics: intentAnalysis.keyTopics
+        keyTopics: intentAnalysis.keyTopics,
       });
 
       // Check if we need to create a conversation summary
-      console.log('📊 [AGENT] Checking for conversation summarization');
-      const summaryResult = await this.conversationSummaryService.checkAndCreateSummary(conversationId);
-      
+      console.log("📊 [AGENT] Checking for conversation summarization");
+      const summaryResult =
+        await this.conversationSummaryService.checkAndCreateSummary(
+          conversationId
+        );
+
       if (summaryResult) {
-        console.log('📊 [AGENT] Created conversation summary:', {
+        console.log("📊 [AGENT] Created conversation summary:", {
           messageCount: summaryResult.messageRange.messageCount,
           summaryLevel: summaryResult.summaryLevel,
-          keyTopics: summaryResult.keyTopics
+          keyTopics: summaryResult.keyTopics,
         });
       }
 
@@ -141,18 +156,18 @@ Always be helpful, accurate, and cite your sources when using web search results
       const messages = this.prepareMessagesForOpenAI(context, intentAnalysis);
 
       // Console logging: System prompt and messages
-      console.log('💬 [AGENT] Prepared messages for OpenAI:', {
-        systemPrompt: this.config.systemPrompt.substring(0, 200) + '...',
+      console.log("💬 [AGENT] Prepared messages for OpenAI:", {
+        systemPrompt: this.config.systemPrompt.substring(0, 200) + "...",
         messageCount: messages.length,
-        totalCharacters: JSON.stringify(messages).length
+        totalCharacters: JSON.stringify(messages).length,
       });
 
-      console.log('📋 [AGENT] Full message payload:', {
-        messages: messages.map(msg => ({
+      console.log("📋 [AGENT] Full message payload:", {
+        messages: messages.map((msg) => ({
           role: msg.role,
           contentLength: msg.content?.length || 0,
-          contentPreview: msg.content?.substring(0, 100) + '...'
-        }))
+          contentPreview: msg.content?.substring(0, 100) + "...",
+        })),
       });
 
       // Get tools if enabled
@@ -161,10 +176,10 @@ Always be helpful, accurate, and cite your sources when using web search results
           ? this.toolRegistry.getToolDefinitions()
           : [];
 
-      console.log('🔧 [AGENT] Tools configuration:', {
+      console.log("🔧 [AGENT] Tools configuration:", {
         toolsEnabled: this.config.enableTools,
         availableToolsCount: tools.length,
-        toolNames: tools.map(t => t.function.name)
+        toolNames: tools.map((t) => t.function.name),
       });
 
       // Call OpenAI API
@@ -183,24 +198,24 @@ Always be helpful, accurate, and cite your sources when using web search results
         completionParams.tool_choice = "auto";
       }
 
-      console.log('🤖 [AGENT] Calling OpenAI API with params:', {
+      console.log("🤖 [AGENT] Calling OpenAI API with params:", {
         model,
         messageCount: messages.length,
         maxTokens: completionParams.max_completion_tokens,
         toolsCount: tools.length,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
 
       const completion = await this.openai.chat.completions.create(
         completionParams
       );
 
-      console.log('✅ [AGENT] OpenAI API response received:', {
+      console.log("✅ [AGENT] OpenAI API response received:", {
         model: completion.model,
         usage: completion.usage,
         finishReason: completion.choices[0]?.finish_reason,
         hasToolCalls: !!completion.choices[0]?.message?.tool_calls?.length,
-        responseLength: completion.choices[0]?.message?.content?.length || 0
+        responseLength: completion.choices[0]?.message?.content?.length || 0,
       });
 
       const assistantMessage = completion.choices[0]?.message;
@@ -217,14 +232,18 @@ Always be helpful, accurate, and cite your sources when using web search results
         assistantMessage.tool_calls &&
         assistantMessage.tool_calls.length > 0
       ) {
-        console.log('🔧 [AGENT] Processing tool calls:', {
+        console.log("🔧 [AGENT] Processing tool calls:", {
           toolCallCount: assistantMessage.tool_calls.length,
-          toolCalls: assistantMessage.tool_calls.map(tc => ({
+          toolCalls: assistantMessage.tool_calls.map((tc) => ({
             id: tc.id,
             type: tc.type,
-            functionName: tc.type === 'function' ? (tc as any).function?.name : 'unknown',
-            argumentsLength: tc.type === 'function' ? (tc as any).function?.arguments?.length || 0 : 0
-          }))
+            functionName:
+              tc.type === "function" ? (tc as any).function?.name : "unknown",
+            argumentsLength:
+              tc.type === "function"
+                ? (tc as any).function?.arguments?.length || 0
+                : 0,
+          })),
         });
 
         const toolResults = await this.executeToolCalls(
@@ -232,11 +251,11 @@ Always be helpful, accurate, and cite your sources when using web search results
         );
         toolsUsed.push(...toolResults);
 
-        console.log('🔧 [AGENT] Tool execution completed:', {
+        console.log("🔧 [AGENT] Tool execution completed:", {
           resultsCount: toolResults.length,
-          successfulTools: toolResults.filter(r => r.success).length,
-          failedTools: toolResults.filter(r => !r.success).length,
-          totalDuration: toolResults.reduce((sum, r) => sum + r.duration, 0)
+          successfulTools: toolResults.filter((r) => r.success).length,
+          failedTools: toolResults.filter((r) => !r.success).length,
+          totalDuration: toolResults.reduce((sum, r) => sum + r.duration, 0),
         });
 
         // Create follow-up completion with tool results
@@ -262,10 +281,10 @@ Always be helpful, accurate, and cite your sources when using web search results
             request.options?.maxTokens || this.config.maxTokens,
         };
 
-        console.log('🤖 [AGENT] Making follow-up API call with tool results:', {
+        console.log("🤖 [AGENT] Making follow-up API call with tool results:", {
           model,
           messageCount: toolMessages.length,
-          timestamp: new Date().toISOString()
+          timestamp: new Date().toISOString(),
         });
 
         // Only add temperature for models that support it (exclude o1 and some other models)
@@ -274,10 +293,11 @@ Always be helpful, accurate, and cite your sources when using web search results
           followUpParams
         );
 
-        console.log('✅ [AGENT] Follow-up API response received:', {
+        console.log("✅ [AGENT] Follow-up API response received:", {
           usage: followUpCompletion.usage,
           finishReason: followUpCompletion.choices[0]?.finish_reason,
-          responseLength: followUpCompletion.choices[0]?.message?.content?.length || 0
+          responseLength:
+            followUpCompletion.choices[0]?.message?.content?.length || 0,
         });
 
         finalContent =
@@ -287,7 +307,7 @@ Always be helpful, accurate, and cite your sources when using web search results
       // Calculate total token usage and cost
       let totalInputTokens = completion.usage?.prompt_tokens || 0;
       let totalOutputTokens = completion.usage?.completion_tokens || 0;
-      
+
       if (followUpCompletion?.usage) {
         totalInputTokens += followUpCompletion.usage.prompt_tokens || 0;
         totalOutputTokens += followUpCompletion.usage.completion_tokens || 0;
@@ -295,15 +315,19 @@ Always be helpful, accurate, and cite your sources when using web search results
 
       const tokenUsage: TokenUsage = {
         inputTokens: totalInputTokens,
-        outputTokens: totalOutputTokens
+        outputTokens: totalOutputTokens,
       };
 
       // Calculate web search costs from tool results
       let totalWebSearchCalls = 0;
       let totalWebSearchCost = 0;
-      
-      toolsUsed.forEach(tool => {
-        if (tool.toolName === 'web_search' && tool.success && tool.output?.metadata) {
+
+      toolsUsed.forEach((tool) => {
+        if (
+          tool.toolName === "web_search" &&
+          tool.success &&
+          tool.output?.metadata
+        ) {
           const metadata = tool.output.metadata;
           if (metadata.webSearchCalls && metadata.webSearchCost) {
             totalWebSearchCalls += metadata.webSearchCalls;
@@ -312,14 +336,21 @@ Always be helpful, accurate, and cite your sources when using web search results
         }
       });
 
-      const webSearchUsage: WebSearchUsage | undefined = totalWebSearchCalls > 0 ? {
-        searchCalls: totalWebSearchCalls,
-        model: model
-      } : undefined;
+      const webSearchUsage: WebSearchUsage | undefined =
+        totalWebSearchCalls > 0
+          ? {
+              searchCalls: totalWebSearchCalls,
+              model: model,
+            }
+          : undefined;
 
-      const costCalculation = CostService.calculateCost(model, tokenUsage, webSearchUsage);
+      const costCalculation = CostService.calculateCost(
+        model,
+        tokenUsage,
+        webSearchUsage
+      );
 
-      console.log('💰 [AGENT] Cost calculation:', {
+      console.log("💰 [AGENT] Cost calculation:", {
         model,
         inputTokens: totalInputTokens,
         outputTokens: totalOutputTokens,
@@ -330,7 +361,7 @@ Always be helpful, accurate, and cite your sources when using web search results
         outputCost: costCalculation.outputCost,
         webSearchCostCalculated: costCalculation.webSearchCost,
         totalCost: costCalculation.totalCost,
-        formattedCost: CostService.formatCost(costCalculation.totalCost)
+        formattedCost: CostService.formatCost(costCalculation.totalCost),
       });
 
       // Add assistant message to context
@@ -353,13 +384,13 @@ Always be helpful, accurate, and cite your sources when using web search results
 
       const duration = Date.now() - startTime;
 
-      console.log('🎯 [AGENT] Request completed successfully:', {
+      console.log("🎯 [AGENT] Request completed successfully:", {
         conversationId,
         duration: `${duration}ms`,
         finalContentLength: finalContent.length,
         toolsUsedCount: toolsUsed.length,
         totalCost: CostService.formatCost(costCalculation.totalCost),
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
 
       return {
@@ -424,19 +455,30 @@ Always be helpful, accurate, and cite your sources when using web search results
     return results;
   }
 
-  private prepareMessagesForOpenAI(context: ConversationContext, intentAnalysis?: IntentAnalysisResult): any[] {
+  private prepareMessagesForOpenAI(
+    context: ConversationContext,
+    intentAnalysis?: IntentAnalysisResult
+  ): any[] {
     let systemPrompt = this.config.systemPrompt;
-    
+
     // Enhance system prompt with intent analysis context
     if (intentAnalysis) {
       systemPrompt += `\n\n## CURRENT CONVERSATION CONTEXT
 **User Intent**: ${intentAnalysis.currentIntent}
 **Contextual Relevance**: ${intentAnalysis.contextualRelevance}
 **Relationship to History**: ${intentAnalysis.relationshipToHistory}
-**Key Topics**: ${intentAnalysis.keyTopics.join(', ')}
+**Key Topics**: ${intentAnalysis.keyTopics.join(", ")}
 **Compressed Context**: ${intentAnalysis.compressedContext}
-${intentAnalysis.pendingQuestions.length > 0 ? `**Pending Questions**: ${intentAnalysis.pendingQuestions.join(', ')}` : ''}
-${intentAnalysis.lastAssistantQuestion ? `**Last Assistant Question**: ${intentAnalysis.lastAssistantQuestion}` : ''}
+${
+  intentAnalysis.pendingQuestions.length > 0
+    ? `**Pending Questions**: ${intentAnalysis.pendingQuestions.join(", ")}`
+    : ""
+}
+${
+  intentAnalysis.lastAssistantQuestion
+    ? `**Last Assistant Question**: ${intentAnalysis.lastAssistantQuestion}`
+    : ""
+}
 
 Use this context to provide more relevant and focused responses that align with the user's current intent and conversation flow.`;
     }
@@ -538,12 +580,12 @@ Use this context to provide more relevant and focused responses that align with 
     savedUserMessageId: string,
     assistantMessage: MessageContext,
     toolsUsed: ToolUsageContext[],
-    costCalculation?: { 
-      inputCost: number; 
-      outputCost: number; 
-      totalCost: number; 
-      inputTokens: number; 
-      outputTokens: number; 
+    costCalculation?: {
+      inputCost: number;
+      outputCost: number;
+      totalCost: number;
+      inputTokens: number;
+      outputTokens: number;
       webSearchCalls?: number;
       webSearchCost?: number;
     }
@@ -582,16 +624,25 @@ Use this context to provide more relevant and focused responses that align with 
       if (costCalculation) {
         const currentConversation = await this.prisma.conversation.findUnique({
           where: { id: context.conversationId! },
-          select: { totalInputTokens: true, totalOutputTokens: true, totalCost: true }
+          select: {
+            totalInputTokens: true,
+            totalOutputTokens: true,
+            totalCost: true,
+          },
         });
 
         await this.prisma.conversation.update({
           where: { id: context.conversationId! },
-          data: { 
+          data: {
             updatedAt: new Date(),
-            totalInputTokens: (currentConversation?.totalInputTokens || 0) + costCalculation.inputTokens,
-            totalOutputTokens: (currentConversation?.totalOutputTokens || 0) + costCalculation.outputTokens,
-            totalCost: (currentConversation?.totalCost || 0) + costCalculation.totalCost,
+            totalInputTokens:
+              (currentConversation?.totalInputTokens || 0) +
+              costCalculation.inputTokens,
+            totalOutputTokens:
+              (currentConversation?.totalOutputTokens || 0) +
+              costCalculation.outputTokens,
+            totalCost:
+              (currentConversation?.totalCost || 0) + costCalculation.totalCost,
           },
         });
       } else {

@@ -280,4 +280,141 @@ router.get(
   })
 );
 
+// GET /api/chat/conversations/:id/summaries - Get conversation summaries
+router.get(
+  "/conversations/:id/summaries",
+  apiLimiter,
+  validateConversationId,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { conversationId } = req.params;
+
+    if (!conversationId) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: "Conversation ID is required",
+          statusCode: 400,
+        },
+      });
+    }
+
+    // Check if conversation exists
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+    });
+
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: "Conversation not found",
+          statusCode: 404,
+        },
+      });
+    }
+
+    const summaries = await prisma.conversationSummary.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: "desc" },
+      select: {
+        id: true,
+        summaryText: true,
+        keyTopics: true,
+        messageRange: true,
+        summaryLevel: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        summaries,
+        total: summaries.length,
+      },
+    });
+  })
+);
+
+// GET /api/chat/conversations/:id/intent-analyses - Get conversation intent analyses
+router.get(
+  "/conversations/:id/intent-analyses",
+  apiLimiter,
+  validateConversationId,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { conversationId } = req.params;
+    const { limit = 10, offset = 0 } = req.query;
+
+    if (!conversationId) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: "Conversation ID is required",
+          statusCode: 400,
+        },
+      });
+    }
+
+    // Check if conversation exists
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+    });
+
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        error: {
+          message: "Conversation not found",
+          statusCode: 404,
+        },
+      });
+    }
+
+    const intentAnalyses = await prisma.intentAnalysis.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: "desc" },
+      take: Number(limit),
+      skip: Number(offset),
+      select: {
+        conversationId: true,
+        userMessageId: true,
+        currentIntent: true,
+        contextualRelevance: true,
+        relationshipToHistory: true,
+        keyTopics: true,
+        pendingQuestions: true,
+        lastAssistantQuestion: true,
+        analysisResult: true,
+        createdAt: true,
+      },
+      include: {
+        userMessage: {
+          select: {
+            content: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+
+    const totalCount = await prisma.intentAnalysis.count({
+      where: { conversationId },
+    });
+
+    return res.json({
+      success: true,
+      data: {
+        intentAnalyses,
+        pagination: {
+          total: totalCount,
+          limit: Number(limit),
+          offset: Number(offset),
+          hasMore: Number(offset) + intentAnalyses.length < totalCount,
+        },
+      },
+    });
+  })
+);
+
 export default router;
