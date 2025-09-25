@@ -155,11 +155,57 @@ GUIDELINES:
           { role: 'system', content: systemPrompt },
           {
             role: 'user',
-            content: `CONVERSATION CONTEXT:\n${contextText}\n\nCURRENT USER PROMPT:\n${currentPrompt}\n\nProvide intent analysis in JSON format.`,
+            content: `CONVERSATION CONTEXT:\n${contextText}\n\nCURRENT USER PROMPT:\n${currentPrompt}\n\nProvide intent analysis.`,
           },
         ],
         temperature: 0.1,
         max_tokens: 1000,
+        response_format: {
+          type: "json_schema",
+          json_schema: {
+            name: "intent_analysis",
+            strict: true,
+            schema: {
+              type: "object",
+              properties: {
+                currentIntent: {
+                  type: "string",
+                  description: "Clear description of what the user wants to achieve"
+                },
+                contextualRelevance: {
+                  type: "string",
+                  enum: ["high", "medium", "low"],
+                  description: "How relevant the current prompt is to conversation history"
+                },
+                relationshipToHistory: {
+                  type: "string",
+                  enum: ["continuation", "new_topic", "clarification"],
+                  description: "How the current prompt relates to previous conversation"
+                },
+                keyTopics: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Key topics identified in the current prompt"
+                },
+                pendingQuestions: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Questions that still need follow-up"
+                },
+                lastAssistantQuestion: {
+                  type: ["string", "null"],
+                  description: "Last question asked by assistant (if any)"
+                },
+                compressedContext: {
+                  type: "string",
+                  description: "Brief summary of relevant context for this intent"
+                }
+              },
+              required: ["currentIntent", "contextualRelevance", "relationshipToHistory", "keyTopics", "pendingQuestions", "lastAssistantQuestion", "compressedContext"],
+              additionalProperties: false
+            }
+          }
+        }
       });
 
       const analysisText = response.choices[0]?.message?.content;
@@ -167,8 +213,8 @@ GUIDELINES:
         throw new Error('No analysis response received');
       }
 
-      // Parse JSON response (handle markdown code blocks)
-      const analysis = this.parseJsonFromResponse(analysisText);
+      // With structured output, this is guaranteed to be valid JSON
+      const analysis = JSON.parse(analysisText);
       
       return {
         currentIntent: analysis.currentIntent,
@@ -193,35 +239,6 @@ GUIDELINES:
         compressedContext: 'Context analysis unavailable',
         analysisResult: { error: error instanceof Error ? error.message : 'Unknown error' },
       };
-    }
-  }
-
-  private parseJsonFromResponse(responseText: string): any {
-    try {
-      // First try to parse directly
-      return JSON.parse(responseText);
-    } catch (error) {
-      // If direct parsing fails, try to extract JSON from markdown code blocks
-      const jsonMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
-      if (jsonMatch && jsonMatch[1]) {
-        try {
-          return JSON.parse(jsonMatch[1]);
-        } catch (innerError) {
-          throw new Error(`Failed to parse JSON from markdown block: ${innerError instanceof Error ? innerError.message : 'Unknown error'}`);
-        }
-      }
-      
-      // Try to find JSON object without markdown wrapper
-      const jsonObjectMatch = responseText.match(/\{[\s\S]*\}/);
-      if (jsonObjectMatch) {
-        try {
-          return JSON.parse(jsonObjectMatch[0]);
-        } catch (innerError) {
-          throw new Error(`Failed to parse extracted JSON object: ${innerError instanceof Error ? innerError.message : 'Unknown error'}`);
-        }
-      }
-      
-      throw new Error(`No valid JSON found in response: ${responseText.substring(0, 200)}...`);
     }
   }
 
