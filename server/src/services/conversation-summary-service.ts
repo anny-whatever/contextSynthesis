@@ -44,8 +44,17 @@ export class ConversationSummaryService {
       userMessagesSinceLastSummary = await this.getAllUserMessages(conversationId);
     }
 
+    console.log("📊 [SUMMARY-CHECK] Summary threshold check:", {
+      conversationId,
+      hasLastSummary: !!lastSummary,
+      userMessagesSinceLastSummary: userMessagesSinceLastSummary.length,
+      threshold: this.TURN_THRESHOLD,
+      needsSummary: userMessagesSinceLastSummary.length >= this.TURN_THRESHOLD
+    });
+
     // Check if we've hit the threshold
     if (userMessagesSinceLastSummary.length >= this.TURN_THRESHOLD) {
+      console.log("📊 [SUMMARY-CREATE] Creating summary for", userMessagesSinceLastSummary.length, "messages");
       return await this.createSummary(conversationId, userMessagesSinceLastSummary, lastSummary);
     }
 

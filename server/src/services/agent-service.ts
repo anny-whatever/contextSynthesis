@@ -149,7 +149,10 @@ Always be helpful, accurate, and cite your sources when using web search results
           messageCount: summaryResult.messageRange.messageCount,
           summaryLevel: summaryResult.summaryLevel,
           keyTopics: summaryResult.keyTopics,
+          summaryText: summaryResult.summaryText.substring(0, 100) + "..."
         });
+      } else {
+        console.log("📊 [AGENT] No summary created - threshold not met or other condition");
       }
 
       // Prepare messages for OpenAI with intent analysis context
@@ -463,12 +466,27 @@ Always be helpful, accurate, and cite your sources when using web search results
 
     // Add conversation summaries as context if they exist
     const summaries = context.metadata?.summaries as any[];
+    
+    // Debug logging for summaries
+    console.log("🔍 [DEBUG] Summary processing:", {
+      hasSummaries: !!summaries,
+      summariesLength: summaries?.length || 0,
+      metadata: context.metadata,
+      summariesData: summaries
+    });
+    
     if (summaries && summaries.length > 0) {
+      console.log("📚 [SUMMARIES] Adding summaries to system prompt:", summaries.length);
       systemPrompt += `\n\n## CONVERSATION HISTORY SUMMARIES
 The following summaries provide context from earlier parts of this conversation:
 
 `;
       summaries.forEach((summary, index) => {
+        console.log(`📚 [SUMMARY ${index + 1}] Adding summary:`, {
+          level: summary.summaryLevel,
+          messageCount: summary.messageRange?.messageCount,
+          keyTopics: summary.keyTopics
+        });
         systemPrompt += `**Summary ${index + 1} (Level ${summary.summaryLevel}):**
 ${summary.summaryText}
 **Key Topics**: ${summary.keyTopics.join(", ")}
@@ -478,6 +496,8 @@ ${summary.summaryText}
       });
 
       systemPrompt += `These summaries represent the conversation history. The recent messages below continue from where these summaries end.`;
+    } else {
+      console.log("📚 [SUMMARIES] No summaries found to add to system prompt");
     }
 
     // Enhance system prompt with intent analysis context
