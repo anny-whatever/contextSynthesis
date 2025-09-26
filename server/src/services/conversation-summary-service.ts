@@ -192,15 +192,57 @@ export class ConversationSummaryService {
       throw new Error("No user messages to summarize");
     }
 
+    // Use current timestamp as endDate to include the latest assistant response
+    // that was just saved to the database
     const allMessages = await this.getAllMessagesInRange(
       conversationId,
       userMessages[0]!.createdAt,
-      userMessages[userMessages.length - 1]!.createdAt
+      new Date() // Use current timestamp to include the latest assistant message
     );
+
+    // Debug: Check message content before topic extraction
+    console.log("🔍 [DEBUG] Messages for topic extraction:", {
+      totalMessages: allMessages.length,
+      userMessagesCount: userMessages.length,
+      expectedMinMessages: userMessages.length * 2, // Each user message should have an assistant response
+      dateRange: {
+        startDate: userMessages[0]!.createdAt.toISOString(),
+        endDate: new Date().toISOString(),
+        lastUserMessageDate: userMessages[userMessages.length - 1]!.createdAt.toISOString()
+      },
+      messageRoles: allMessages.map(msg => msg.role),
+      lastMessage: allMessages.length > 0 ? {
+        id: allMessages[allMessages.length - 1]!.id,
+        role: allMessages[allMessages.length - 1]!.role,
+        createdAt: allMessages[allMessages.length - 1]!.createdAt.toISOString(),
+        contentPreview: allMessages[allMessages.length - 1]!.content?.substring(0, 100) + "..."
+      } : null,
+      messageContentCheck: allMessages.map(msg => ({
+        id: msg.id,
+        role: msg.role,
+        hasContent: !!msg.content,
+        contentLength: msg.content?.length || 0,
+        createdAt: msg.createdAt.toISOString(),
+        contentPreview: msg.content?.substring(0, 100) + "..."
+      }))
+    });
 
     // Extract granular topics from the conversation
     const topicExtractionResult =
       await this.topicExtractionService.extractGranularTopics(allMessages);
+
+    // Debug: Check topic extraction result
+    console.log("🔍 [DEBUG] Topic extraction result:", {
+      batchId: topicExtractionResult.batchId,
+      topicsCount: topicExtractionResult.topics.length,
+      topics: topicExtractionResult.topics.map(topic => ({
+        topicName: topic.topicName,
+        hasRelatedTopics: Array.isArray(topic.relatedTopics),
+        relatedTopicsCount: topic.relatedTopics?.length || 0,
+        relatedTopics: topic.relatedTopics,
+        hasSummary: !!topic.summary
+      }))
+    });
 
     // Create summaries for each topic
     const topicSummaries: TopicSummaryResult[] = [];
@@ -258,11 +300,24 @@ export class ConversationSummaryService {
       throw new Error("No messages available for topic summary");
     }
 
+    // Debug: Check topic data before creating summary
+    console.log("🔍 [DEBUG] Creating topic summary:", {
+      topicName: topic.topicName,
+      hasRelatedTopics: Array.isArray(topic.relatedTopics),
+      relatedTopicsValue: topic.relatedTopics,
+      relatedTopicsType: typeof topic.relatedTopics,
+      hasSummary: !!topic.summary,
+      relevanceScore: topic.relevanceScore
+    });
+
+    // Ensure relatedTopics is always an array
+    const safeRelatedTopics = Array.isArray(topic.relatedTopics) ? topic.relatedTopics : [];
+
     return {
       id: `topic_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       topicName: topic.topicName,
       summaryText: topic.summary,
-      relatedTopics: topic.relatedTopics,
+      relatedTopics: safeRelatedTopics,
       messageRange: {
         startMessageId: allMessages[0]!.id,
         endMessageId: allMessages[allMessages.length - 1]!.id,

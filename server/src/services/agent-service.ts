@@ -137,23 +137,6 @@ Always be helpful, accurate, and cite your sources when using web search results
         keyTopics: intentAnalysis.keyTopics,
       });
 
-      // Check if we need to create a conversation summary
-      console.log("📊 [AGENT] Checking for conversation summarization");
-      const summaryResult =
-        await this.conversationSummaryService.checkAndCreateSummary(
-          conversationId
-        );
-
-      if (summaryResult) {
-        console.log("📊 [AGENT] Created conversation summary batch:", {
-          batchId: summaryResult.batchId,
-          topicCount: summaryResult.summaries.length,
-          topics: summaryResult.summaries.map((s: any) => s.topicName).join(', ')
-        });
-      } else {
-        console.log("📊 [AGENT] No summary created - threshold not met or other condition");
-      }
-
       // Prepare messages for OpenAI with intent analysis context
       const messages = this.prepareMessagesForOpenAI(context, intentAnalysis);
 
@@ -384,6 +367,23 @@ Always be helpful, accurate, and cite your sources when using web search results
         costCalculation
       );
 
+      // Check if we need to create a conversation summary AFTER assistant message is saved
+      console.log("📊 [AGENT] Checking for conversation summarization");
+      const summaryResult =
+        await this.conversationSummaryService.checkAndCreateSummary(
+          conversationId
+        );
+
+      if (summaryResult) {
+        console.log("📊 [AGENT] Created conversation summary batch:", {
+          batchId: summaryResult.batchId,
+          topicCount: summaryResult.summaries.length,
+          topics: summaryResult.summaries.map((s: any) => s.topicName).join(', ')
+        });
+      } else {
+        console.log("📊 [AGENT] No summary created - threshold not met or other condition");
+      }
+
       const duration = Date.now() - startTime;
 
       console.log("🎯 [AGENT] Request completed successfully:", {
@@ -484,11 +484,16 @@ The following summaries provide context from earlier parts of this conversation:
         console.log(`📚 [SUMMARY ${index + 1}] Adding summary:`, {
           level: summary.summaryLevel,
           messageCount: summary.messageRange?.messageCount,
-          keyTopics: summary.keyTopics
+          relatedTopics: summary.relatedTopics
         });
+        
+        const relatedTopicsStr = Array.isArray(summary.relatedTopics) 
+          ? summary.relatedTopics.join(", ") 
+          : "No related topics";
+        
         systemPrompt += `**Summary ${index + 1} (Level ${summary.summaryLevel}):**
 ${summary.summaryText}
-**Key Topics**: ${summary.keyTopics.join(", ")}
+**Key Topics**: ${relatedTopicsStr}
 **Covers**: ${summary.messageRange?.messageCount || 0} messages
 
 `;
