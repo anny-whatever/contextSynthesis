@@ -191,11 +191,17 @@ CONTEXT RETRIEVAL GUIDELINES:
 - needsHistoricalContext: true if the query references past topics, needs background, or builds on previous discussion
 - contextRetrievalStrategy:
   * "none": For simple greetings, basic questions that don't need history
-  * "recent_only": For queries that only need the last few exchanges
-  * "semantic_search": For queries about specific topics that might be scattered throughout history
-  * "all_available": For complex queries needing comprehensive context
+  * "recent_only": For queries that only need the last few exchanges (last 2-3 messages)
+  * "semantic_search": For queries about SPECIFIC TOPICS mentioned in the past, especially when user says "we talked about", "we discussed", "tell me about [specific thing]", or references specific subjects/items/concepts from history
+  * "all_available": For complex queries needing comprehensive context across entire conversation
 - semanticSearchQueries: Generate 1-3 specific search terms if using semantic_search strategy, empty array otherwise
 - maxContextItems: Suggest 3-5 for simple queries, 5-8 for complex ones, up to 10 for comprehensive analysis
+
+IMPORTANT: Use "semantic_search" when the user:
+- References specific topics, items, or concepts from past conversation
+- Uses phrases like "we talked about", "we discussed", "tell me about [X]", "what did we say about"
+- Asks about specific technical details, products, or subjects mentioned before
+- Wants information about something specific that was covered in previous exchanges
 
 GUIDELINES:
 - Focus on actionable intent, not just topic identification

@@ -98,6 +98,7 @@ export class SmartContextService {
       try {
         const searchResults = await this.semanticSearchTool.execute({
           query,
+          conversationId,
           limit: Math.ceil(limit / searchQueries.length),
           threshold: 0.3,
         });
