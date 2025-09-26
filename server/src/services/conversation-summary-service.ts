@@ -5,6 +5,7 @@ import {
   ExtractedTopic,
   TopicExtractionResult,
 } from "./topic-extraction-service";
+import { TopicEmbeddingService } from "./topic-embedding-service";
 
 export interface TopicSummaryResult {
   id: string;
@@ -38,12 +39,14 @@ export class ConversationSummaryService {
   private prisma: PrismaClient;
   private openai: OpenAI;
   private topicExtractionService: TopicExtractionService;
+  private topicEmbeddingService: TopicEmbeddingService;
   private readonly TURN_THRESHOLD = 3; // 10 user messages = 10 turns
 
-  constructor(prisma: PrismaClient, openai: OpenAI) {
+  constructor(prisma: PrismaClient, openai: OpenAI, topicEmbeddingService?: TopicEmbeddingService) {
     this.prisma = prisma;
     this.openai = openai;
     this.topicExtractionService = new TopicExtractionService();
+    this.topicEmbeddingService = topicEmbeddingService || new TopicEmbeddingService(openai, prisma);
   }
 
   async checkAndCreateSummary(
@@ -335,7 +338,7 @@ export class ConversationSummaryService {
     messages: Message[]
   ): Promise<void> {
     // Create all topic summaries in a transaction
-    await this.prisma.$transaction(async (tx) => {
+    const createdSummaries = await this.prisma.$transaction(async (tx) => {
       const createdSummaries = [];
 
       for (const summary of summaries) {
@@ -366,7 +369,24 @@ export class ConversationSummaryService {
           },
         });
       }
+
+      return createdSummaries;
     });
+
+    // Generate embeddings for all created summaries immediately after transaction
+    console.log(`🔄 [EMBEDDING] Generating embeddings for ${createdSummaries.length} summaries...`);
+    
+    for (const createdSummary of createdSummaries) {
+      try {
+        await this.topicEmbeddingService.updateSummaryEmbedding(createdSummary.id);
+        console.log(`✅ [EMBEDDING] Generated embedding for summary: ${createdSummary.id} (${createdSummary.topicName})`);
+      } catch (error) {
+        console.error(`❌ [EMBEDDING] Failed to generate embedding for summary ${createdSummary.id}:`, error);
+        // Don't throw here - we want to continue with other embeddings even if one fails
+      }
+    }
+
+    console.log(`🎯 [EMBEDDING] Completed embedding generation for batch`);
   }
 
   async getAllSummaries(conversationId: string): Promise<TopicSummaryResult[]> {
