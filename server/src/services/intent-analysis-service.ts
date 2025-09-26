@@ -58,16 +58,85 @@ export class IntentAnalysisService {
     userMessageId: string,
     currentPrompt: string
   ): Promise<IntentAnalysisResult> {
-    // Load conversation context
-    const context = await this.loadConversationContext(conversationId);
+    // Stage 1: Load minimal context and determine strategy
+    const minimalContext = await this.loadMinimalContext(conversationId);
+    const initialAnalysis = await this.performIntentAnalysis(minimalContext, currentPrompt);
 
-    // Perform intent analysis
-    const analysis = await this.performIntentAnalysis(context, currentPrompt);
+    // Stage 2: Load appropriate context based on strategy
+    let finalContext: ConversationContext;
+    if (initialAnalysis.contextRetrievalStrategy === 'semantic_search') {
+      // TODO: Implement semantic search based context loading
+      finalContext = await this.loadConversationContext(conversationId);
+    } else if (initialAnalysis.contextRetrievalStrategy === 'all_available') {
+      finalContext = await this.loadConversationContext(conversationId);
+    } else if (initialAnalysis.contextRetrievalStrategy === 'recent_only') {
+      finalContext = minimalContext; // Use minimal context
+    } else {
+      finalContext = minimalContext; // 'none' strategy
+    }
+
+    // Stage 3: Perform final analysis with appropriate context (if different from initial)
+    let finalAnalysis: IntentAnalysisResult;
+    if (finalContext !== minimalContext) {
+      finalAnalysis = await this.performIntentAnalysis(finalContext, currentPrompt);
+    } else {
+      finalAnalysis = initialAnalysis;
+    }
 
     // Store the analysis result
-    await this.storeIntentAnalysis(conversationId, userMessageId, analysis);
+    await this.storeIntentAnalysis(conversationId, userMessageId, finalAnalysis);
 
-    return analysis;
+    return finalAnalysis;
+  }
+
+  private async loadMinimalContext(
+    conversationId: string
+  ): Promise<ConversationContext> {
+    // Load only recent messages for initial intent analysis
+    const recentMessages = await this.prisma.message.findMany({
+      where: { conversationId },
+      orderBy: { createdAt: "desc" },
+      take: 10, // Only last 10 messages
+      select: {
+        id: true,
+        role: true,
+        content: true,
+        createdAt: true,
+      },
+    });
+
+    // Get the last intent analysis for context
+    const lastIntentAnalysis = await this.prisma.intentAnalysis.findFirst({
+      where: { conversationId },
+      orderBy: { createdAt: "desc" },
+      select: {
+        currentIntent: true,
+        keyTopics: true,
+        pendingQuestions: true,
+        lastAssistantQuestion: true,
+      },
+    });
+
+    const context: ConversationContext = {
+      messages: recentMessages.reverse().map((msg) => ({
+        id: msg.id,
+        role: msg.role,
+        content: msg.content,
+        createdAt: msg.createdAt,
+      })),
+      summaries: [], // No summaries in minimal context
+    };
+
+    if (lastIntentAnalysis) {
+      context.lastIntentAnalysis = {
+        currentIntent: lastIntentAnalysis.currentIntent,
+        keyTopics: lastIntentAnalysis.keyTopics,
+        pendingQuestions: lastIntentAnalysis.pendingQuestions,
+        lastAssistantQuestion: lastIntentAnalysis.lastAssistantQuestion,
+      };
+    }
+
+    return context;
   }
 
   private async loadConversationContext(
@@ -197,11 +266,15 @@ CONTEXT RETRIEVAL GUIDELINES:
 - semanticSearchQueries: Generate 1-3 specific search terms if using semantic_search strategy, empty array otherwise
 - maxContextItems: Suggest 3-5 for simple queries, 5-8 for complex ones, up to 10 for comprehensive analysis
 
+CRITICAL SEMANTIC SEARCH RULE:
+If the user's query references SPECIFIC TOPICS, ITEMS, or CONCEPTS from past conversation (using phrases like "we talked about", "we discussed", "what were the", "tell me about [X]", "what did we say about"), you MUST use "semantic_search" strategy REGARDLESS of whether those topics appear in the current context. The semantic search will find the most relevant historical information about those specific topics.
+
 IMPORTANT: Use "semantic_search" when the user:
 - References specific topics, items, or concepts from past conversation
-- Uses phrases like "we talked about", "we discussed", "tell me about [X]", "what did we say about"
+- Uses phrases like "we talked about", "we discussed", "tell me about [X]", "what did we say about", "what were the [X] we discussed"
 - Asks about specific technical details, products, or subjects mentioned before
 - Wants information about something specific that was covered in previous exchanges
+- Even if some information about the topic exists in current context, use semantic_search to get comprehensive topic-specific information
 
 GUIDELINES:
 - Focus on actionable intent, not just topic identification

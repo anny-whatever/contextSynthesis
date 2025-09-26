@@ -1,6 +1,6 @@
-import { PrismaClient } from '@prisma/client';
-import { SemanticTopicSearchTool } from '../tools/semantic-topic-search-tool';
-import { IntentAnalysisResult } from './intent-analysis-service';
+import { PrismaClient } from "@prisma/client";
+import { SemanticTopicSearchTool } from "../tools/semantic-topic-search-tool";
+import { IntentAnalysisResult } from "./intent-analysis-service";
 
 export interface SmartContextResult {
   summaries: Array<{
@@ -20,7 +20,10 @@ export class SmartContextService {
   private prisma: PrismaClient;
   private semanticSearchTool: SemanticTopicSearchTool;
 
-  constructor(prisma: PrismaClient, semanticSearchTool: SemanticTopicSearchTool) {
+  constructor(
+    prisma: PrismaClient,
+    semanticSearchTool: SemanticTopicSearchTool
+  ) {
     this.prisma = prisma;
     this.semanticSearchTool = semanticSearchTool;
   }
@@ -29,37 +32,88 @@ export class SmartContextService {
     conversationId: string,
     intentAnalysis: IntentAnalysisResult
   ): Promise<SmartContextResult> {
-    const { contextRetrievalStrategy, needsHistoricalContext, semanticSearchQueries, maxContextItems } = intentAnalysis;
+    const {
+      contextRetrievalStrategy,
+      needsHistoricalContext,
+      semanticSearchQueries,
+      maxContextItems,
+      keyTopics,
+    } = intentAnalysis;
 
     // If no historical context is needed, return empty
-    if (!needsHistoricalContext || contextRetrievalStrategy === 'none') {
+    if (!needsHistoricalContext || contextRetrievalStrategy === "none") {
       return {
         summaries: [],
-        retrievalMethod: 'none',
+        retrievalMethod: "none",
         totalAvailable: await this.getTotalSummariesCount(conversationId),
         retrieved: 0,
       };
     }
 
     switch (contextRetrievalStrategy) {
-      case 'recent_only':
-        return await this.getRecentContext(conversationId, maxContextItems || 3);
-      
-      case 'semantic_search':
-        return await this.getSemanticContext(conversationId, semanticSearchQueries || [], maxContextItems || 5);
-      
-      case 'all_available':
+      case "recent_only":
+        return await this.getRecentContext(
+          conversationId,
+          maxContextItems || 3,
+          keyTopics
+        );
+
+      case "semantic_search":
+        return await this.getSemanticContext(
+          conversationId,
+          semanticSearchQueries || [],
+          maxContextItems || 5
+        );
+
+      case "all_available":
         return await this.getAllContext(conversationId, maxContextItems || 10);
-      
+
       default:
-        return await this.getRecentContext(conversationId, 3);
+        return await this.getRecentContext(conversationId, 3, keyTopics);
     }
   }
 
-  private async getRecentContext(conversationId: string, limit: number): Promise<SmartContextResult> {
+  private async getRecentContext(
+    conversationId: string,
+    limit: number,
+    keyTopics?: string[]
+  ): Promise<SmartContextResult> {
+    // If keyTopics are provided, filter by topic relevance first, then by recency
+    let whereClause: any = { conversationId };
+
+    if (keyTopics && keyTopics.length > 0) {
+      // Extract individual keywords from key topics for more flexible matching
+      const keywords = keyTopics.flatMap((topic) =>
+        topic
+          .toLowerCase()
+          .split(/\s+/)
+          .filter((word) => word.length > 2)
+      );
+
+      // Create OR conditions for flexible topic matching using individual keywords
+      const keywordConditions = keywords
+        .map((keyword) => [
+          { topicName: { contains: keyword, mode: "insensitive" } },
+          { summaryText: { contains: keyword, mode: "insensitive" } },
+          { relatedTopics: { array_contains: keyword } },
+        ])
+        .flat();
+
+      // Also include exact phrase matching for better precision
+      const phraseConditions = keyTopics
+        .map((topic) => [
+          { topicName: { contains: topic, mode: "insensitive" } },
+          { summaryText: { contains: topic, mode: "insensitive" } },
+          { relatedTopics: { array_contains: topic } },
+        ])
+        .flat();
+
+      whereClause.OR = [...keywordConditions, ...phraseConditions];
+    }
+
     const summaries = await this.prisma.conversationSummary.findMany({
-      where: { conversationId },
-      orderBy: { createdAt: 'desc' },
+      where: whereClause,
+      orderBy: { createdAt: "desc" },
       take: limit,
       select: {
         summaryText: true,
@@ -75,7 +129,7 @@ export class SmartContextService {
 
     return {
       summaries,
-      retrievalMethod: 'recent_only',
+      retrievalMethod: "recent_only",
       totalAvailable: totalCount,
       retrieved: summaries.length,
     };
@@ -132,19 +186,19 @@ export class SmartContextService {
 
     return {
       summaries,
-      retrievalMethod: 'semantic_search',
+      retrievalMethod: "semantic_search",
       totalAvailable: totalCount,
       retrieved: summaries.length,
     };
   }
 
-  private async getAllContext(conversationId: string, limit: number): Promise<SmartContextResult> {
+  private async getAllContext(
+    conversationId: string,
+    limit: number
+  ): Promise<SmartContextResult> {
     const summaries = await this.prisma.conversationSummary.findMany({
       where: { conversationId },
-      orderBy: [
-        { summaryLevel: 'asc' },
-        { createdAt: 'desc' },
-      ],
+      orderBy: [{ summaryLevel: "asc" }, { createdAt: "desc" }],
       take: limit,
       select: {
         summaryText: true,
@@ -160,13 +214,15 @@ export class SmartContextService {
 
     return {
       summaries,
-      retrievalMethod: 'all_summaries',
+      retrievalMethod: "all_summaries",
       totalAvailable: totalCount,
       retrieved: summaries.length,
     };
   }
 
-  private async getTotalSummariesCount(conversationId: string): Promise<number> {
+  private async getTotalSummariesCount(
+    conversationId: string
+  ): Promise<number> {
     return await this.prisma.conversationSummary.count({
       where: { conversationId },
     });
@@ -179,9 +235,9 @@ export class SmartContextService {
     recentSummaries: number;
   }> {
     const totalSummaries = await this.getTotalSummariesCount(conversationId);
-    
+
     const summaryLevels = await this.prisma.conversationSummary.groupBy({
-      by: ['summaryLevel'],
+      by: ["summaryLevel"],
       where: { conversationId },
       _count: { summaryLevel: true },
     });
@@ -196,7 +252,7 @@ export class SmartContextService {
     });
 
     const levelCounts: Record<number, number> = {};
-    summaryLevels.forEach(level => {
+    summaryLevels.forEach((level) => {
       levelCounts[level.summaryLevel] = level._count.summaryLevel;
     });
 
