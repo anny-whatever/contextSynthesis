@@ -1,13 +1,20 @@
 import { ITool, ToolDefinition, ToolResult, ToolExecutionOptions, ToolUsageMetrics } from '../types/tool';
 import { WebSearchTool } from './web-search-tool';
+import { SemanticTopicSearchTool } from './semantic-topic-search-tool';
+import { TopicEmbeddingService } from '../services/topic-embedding-service';
 import { PrismaClient } from '@prisma/client';
+import OpenAI from 'openai';
 
 export class ToolRegistry {
   private tools: Map<string, ITool> = new Map();
   private prisma: PrismaClient;
+  private openai: OpenAI;
 
-  constructor(prisma?: PrismaClient) {
+  constructor(prisma?: PrismaClient, openai?: OpenAI) {
     this.prisma = prisma || new PrismaClient();
+    this.openai = openai || new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
     this.initializeDefaultTools();
   }
 
@@ -18,6 +25,11 @@ export class ToolRegistry {
     // Register the web search tool
     const webSearchTool = new WebSearchTool(this.prisma);
     this.registerTool(webSearchTool);
+
+    // Register the semantic topic search tool
+    const embeddingService = new TopicEmbeddingService(this.openai, this.prisma);
+    const semanticSearchTool = new SemanticTopicSearchTool(embeddingService, this.prisma);
+    this.registerTool(semanticSearchTool);
   }
 
   /**

@@ -94,6 +94,7 @@ model ConversationSummary {
   summaryLevel   Int      @default(1) // 1 = first summary, 2 = summary of summaries, etc.
   topicRelevance Float    @default(1.0) // Relevance score for this topic (0.0 - 1.0)
   batchId        String?  // Groups topics created in the same summarization batch
+  topicEmbedding Unsupported("vector(384)")? // Vector embedding for semantic search
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 

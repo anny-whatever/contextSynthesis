@@ -10,6 +10,7 @@ import {
   ConversationSummaryService,
   SummaryBatchResult,
 } from "./conversation-summary-service";
+import { SmartContextService } from "./smart-context-service";
 import {
   AgentConfig,
   AgentRequest,
@@ -25,6 +26,7 @@ export class AgentService {
   private toolRegistry: ToolRegistry;
   private intentAnalysisService: IntentAnalysisService;
   private conversationSummaryService: ConversationSummaryService;
+  private smartContextService: SmartContextService;
   private config: AgentConfig;
 
   constructor(
@@ -40,7 +42,7 @@ export class AgentService {
       });
 
     this.prisma = prisma || new PrismaClient();
-    this.toolRegistry = toolRegistry || new ToolRegistry(this.prisma);
+    this.toolRegistry = toolRegistry || new ToolRegistry(this.prisma, this.openai);
     this.intentAnalysisService = new IntentAnalysisService(
       this.prisma,
       this.openai
@@ -49,6 +51,13 @@ export class AgentService {
       this.prisma,
       this.openai
     );
+    
+    // Initialize SmartContextService with the semantic search tool
+    const semanticSearchTool = this.toolRegistry.getTool('semantic_topic_search');
+    if (!semanticSearchTool) {
+      throw new Error('SemanticTopicSearchTool not found in tool registry');
+    }
+    this.smartContextService = new SmartContextService(this.prisma, semanticSearchTool as any);
 
     this.config = {
       model: process.env.DEFAULT_AGENT_MODEL || "gpt-4o-mini",
@@ -93,16 +102,16 @@ Always be helpful, accurate, and cite your sources when using web search results
     }
 
     try {
-      // Load conversation context
-      const context = await this.loadConversationContext(
+      // Load basic conversation context (without summaries for now)
+      const basicContext = await this.loadConversationContext(
         conversationId,
         request.userId
       );
 
-      console.log("📚 [AGENT] Loaded conversation context:", {
+      console.log("📚 [AGENT] Loaded basic conversation context:", {
         conversationId,
-        messageHistoryCount: context.messageHistory.length,
-        userId: context.userId,
+        messageHistoryCount: basicContext.messageHistory.length,
+        userId: basicContext.userId,
       });
 
       // Add user message to context
@@ -111,7 +120,7 @@ Always be helpful, accurate, and cite your sources when using web search results
         content: request.message,
         timestamp: new Date(),
       };
-      context.messageHistory.push(userMessage);
+      basicContext.messageHistory.push(userMessage);
 
       // Save user message first to get its ID for intent analysis
       const savedUserMessage = await this.prisma.message.create({
@@ -135,7 +144,19 @@ Always be helpful, accurate, and cite your sources when using web search results
         contextualRelevance: intentAnalysis.contextualRelevance,
         relationshipToHistory: intentAnalysis.relationshipToHistory,
         keyTopics: intentAnalysis.keyTopics,
+        needsHistoricalContext: intentAnalysis.needsHistoricalContext,
+        contextRetrievalStrategy: intentAnalysis.contextRetrievalStrategy,
       });
+
+      // Now load smart context based on intent analysis
+      const smartContext = await this.loadSmartConversationContext(
+        conversationId,
+        intentAnalysis,
+        request.userId
+      );
+
+      // Use the smart context for the rest of the processing
+      const context = smartContext;
 
       // Prepare messages for OpenAI with intent analysis context
       const messages = this.prepareMessagesForOpenAI(context, intentAnalysis);
@@ -556,6 +577,93 @@ Use this context to provide more relevant and focused responses that align with 
     }
 
     return messages;
+  }
+
+  private async loadSmartConversationContext(
+    conversationId: string,
+    intentAnalysis: IntentAnalysisResult,
+    userId?: string
+  ): Promise<ConversationContext> {
+    try {
+      const conversation = await this.prisma.conversation.findUnique({
+        where: { id: conversationId },
+        include: {
+          // Only load messages that don't have a summaryId (i.e., recent unsummarized messages)
+          messages: {
+            where: {
+              summaryId: null, // Only get messages that haven't been summarized
+            },
+            orderBy: { createdAt: "asc" },
+            include: {
+              toolUsages: true,
+            },
+          },
+        },
+      });
+
+      if (!conversation) {
+        console.warn(
+          `Conversation with ID ${conversationId} not found, returning empty context`
+        );
+        return {
+          conversationId,
+          userId: userId || "anonymous",
+          messageHistory: [],
+          metadata: {},
+        };
+      }
+
+      // Transform only the non-summarized messages
+      const messageHistory: MessageContext[] = conversation.messages.map(
+        (msg) => ({
+          id: msg.id,
+          role: msg.role,
+          content: msg.content,
+          timestamp: msg.createdAt,
+          toolUsages: msg.toolUsages.map((usage) => ({
+            toolName: usage.toolName,
+            input: usage.input as any,
+            output: usage.output as any,
+            success: usage.status === "COMPLETED",
+            duration: usage.duration || 0,
+            error: usage.error || undefined,
+          })),
+          isSummary: false,
+        })
+      );
+
+      // Use smart context retrieval based on intent analysis
+      const smartContextResult = await this.smartContextService.retrieveContext(
+        conversationId,
+        intentAnalysis
+      );
+
+      console.log(`🧠 [SMART CONTEXT] Retrieved context:`, {
+        conversationId,
+        strategy: smartContextResult.retrievalMethod,
+        totalAvailable: smartContextResult.totalAvailable,
+        retrieved: smartContextResult.retrieved,
+        needsHistoricalContext: intentAnalysis.needsHistoricalContext,
+        keyTopics: intentAnalysis.keyTopics,
+      });
+
+      return {
+        conversationId,
+        userId: conversation.userId || "anonymous",
+        messageHistory,
+        metadata: {
+          summaries: smartContextResult.summaries,
+          contextStrategy: smartContextResult.retrievalMethod,
+          contextStats: {
+            totalAvailable: smartContextResult.totalAvailable,
+            retrieved: smartContextResult.retrieved,
+          },
+        },
+      };
+    } catch (error) {
+      console.error("Error loading smart conversation context:", error);
+      throw new Error("Failed to load smart conversation context");
+    }
   }
 
   private async loadConversationContext(

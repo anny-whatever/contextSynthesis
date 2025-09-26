@@ -10,6 +10,10 @@ export interface IntentAnalysisResult {
   lastAssistantQuestion?: string | undefined;
   compressedContext: string;
   analysisResult: any;
+  needsHistoricalContext: boolean;
+  contextRetrievalStrategy: 'none' | 'recent_only' | 'semantic_search' | 'all_available';
+  semanticSearchQueries?: string[];
+  maxContextItems?: number;
 }
 
 export interface ConversationContext {
@@ -146,6 +150,8 @@ CONTEXT ANALYSIS RULES:
 3. Identify key topics and any pending questions from the assistant
 4. Provide a compressed context summary for efficient processing
 5. Rate contextual relevance as high/medium/low
+6. Determine if historical context is needed and what retrieval strategy to use
+7. Generate semantic search queries if needed for context retrieval
 
 RESPONSE FORMAT (JSON):
 {
@@ -155,8 +161,22 @@ RESPONSE FORMAT (JSON):
   "keyTopics": ["topic1", "topic2", "topic3"],
   "pendingQuestions": ["question1", "question2"],
   "lastAssistantQuestion": "Last question asked by assistant (if any)",
-  "compressedContext": "Brief summary of relevant context for this intent"
+  "compressedContext": "Brief summary of relevant context for this intent",
+  "needsHistoricalContext": true|false,
+  "contextRetrievalStrategy": "none|recent_only|semantic_search|all_available",
+  "semanticSearchQueries": ["query1", "query2"] (optional, only if semantic_search strategy),
+  "maxContextItems": 3-10 (recommended number of context items to retrieve)
 }
+
+CONTEXT RETRIEVAL GUIDELINES:
+- needsHistoricalContext: true if the query references past topics, needs background, or builds on previous discussion
+- contextRetrievalStrategy:
+  * "none": For simple greetings, basic questions that don't need history
+  * "recent_only": For queries that only need the last few exchanges
+  * "semantic_search": For queries about specific topics that might be scattered throughout history
+  * "all_available": For complex queries needing comprehensive context
+- semanticSearchQueries: Generate 1-3 specific search terms if using semantic_search strategy
+- maxContextItems: Suggest 3-5 for simple queries, 5-8 for complex ones, up to 10 for comprehensive analysis
 
 GUIDELINES:
 - Focus on actionable intent, not just topic identification
@@ -216,9 +236,29 @@ GUIDELINES:
                 compressedContext: {
                   type: "string",
                   description: "Brief summary of relevant context for this intent"
+                },
+                needsHistoricalContext: {
+                  type: "boolean",
+                  description: "Whether historical context is needed for this query"
+                },
+                contextRetrievalStrategy: {
+                  type: "string",
+                  enum: ["none", "recent_only", "semantic_search", "all_available"],
+                  description: "Strategy for retrieving historical context"
+                },
+                semanticSearchQueries: {
+                  type: "array",
+                  items: { type: "string" },
+                  description: "Search queries for semantic context retrieval"
+                },
+                maxContextItems: {
+                  type: "integer",
+                  minimum: 1,
+                  maximum: 10,
+                  description: "Maximum number of context items to retrieve"
                 }
               },
-              required: ["currentIntent", "contextualRelevance", "relationshipToHistory", "keyTopics", "pendingQuestions", "lastAssistantQuestion", "compressedContext"],
+              required: ["currentIntent", "contextualRelevance", "relationshipToHistory", "keyTopics", "pendingQuestions", "lastAssistantQuestion", "compressedContext", "needsHistoricalContext", "contextRetrievalStrategy", "semanticSearchQueries", "maxContextItems"],
               additionalProperties: false
             }
           }
@@ -242,6 +282,10 @@ GUIDELINES:
         lastAssistantQuestion: analysis.lastAssistantQuestion,
         compressedContext: analysis.compressedContext,
         analysisResult: analysis,
+        needsHistoricalContext: analysis.needsHistoricalContext,
+        contextRetrievalStrategy: analysis.contextRetrievalStrategy,
+        semanticSearchQueries: analysis.semanticSearchQueries,
+        maxContextItems: analysis.maxContextItems,
       };
     } catch (error) {
       console.error('Intent analysis failed:', error);
@@ -255,6 +299,9 @@ GUIDELINES:
         pendingQuestions: [],
         compressedContext: 'Context analysis unavailable',
         analysisResult: { error: error instanceof Error ? error.message : 'Unknown error' },
+        needsHistoricalContext: true,
+        contextRetrievalStrategy: 'recent_only',
+        maxContextItems: 5,
       };
     }
   }
@@ -336,6 +383,9 @@ GUIDELINES:
       lastAssistantQuestion: analysis.lastAssistantQuestion || undefined,
       compressedContext: '', // Not stored separately, would need to regenerate
       analysisResult: analysis.analysisResult,
+      needsHistoricalContext: true, // Default assumption for stored analysis
+      contextRetrievalStrategy: 'recent_only', // Default strategy
+      maxContextItems: 5, // Default value
     };
   }
 }
