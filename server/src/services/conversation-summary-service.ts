@@ -1,15 +1,30 @@
-import { PrismaClient } from '@prisma/client';
-import OpenAI from 'openai';
+import { PrismaClient, Message } from "@prisma/client";
+import OpenAI from "openai";
+import {
+  TopicExtractionService,
+  ExtractedTopic,
+  TopicExtractionResult,
+} from "./topic-extraction-service";
 
-export interface SummaryResult {
+export interface TopicSummaryResult {
+  id: string;
+  topicName: string;
   summaryText: string;
-  keyTopics: string[];
+  relatedTopics: string[];
   messageRange: {
     startMessageId: string;
     endMessageId: string;
     messageCount: number;
   };
   summaryLevel: number;
+  topicRelevance: number;
+  batchId: string;
+}
+
+export interface SummaryBatchResult {
+  summaries: TopicSummaryResult[];
+  batchId: string;
+  totalTopics: number;
 }
 
 export interface MessageForSummary {
@@ -22,62 +37,107 @@ export interface MessageForSummary {
 export class ConversationSummaryService {
   private prisma: PrismaClient;
   private openai: OpenAI;
-  private readonly TURN_THRESHOLD = 10; // 10 user messages = 10 turns
+  private topicExtractionService: TopicExtractionService;
+  private readonly TURN_THRESHOLD = 3; // 10 user messages = 10 turns
 
   constructor(prisma: PrismaClient, openai: OpenAI) {
     this.prisma = prisma;
     this.openai = openai;
+    this.topicExtractionService = new TopicExtractionService();
   }
 
-  async checkAndCreateSummary(conversationId: string): Promise<SummaryResult | null> {
-    // Count user messages since last summary
-    const lastSummary = await this.getLatestSummary(conversationId);
-    
+  async checkAndCreateSummary(
+    conversationId: string
+  ): Promise<SummaryBatchResult | null> {
+    // Count user messages since last summary batch
+    const lastSummaryBatch = await this.getLatestSummaryBatch(conversationId);
+
     let userMessagesSinceLastSummary: MessageForSummary[];
-    
-    if (lastSummary) {
-      // Get messages after the last summary
-      const lastSummaryEndMessageId = lastSummary.messageRange.endMessageId;
-      userMessagesSinceLastSummary = await this.getUserMessagesSince(conversationId, lastSummaryEndMessageId);
+
+    if (lastSummaryBatch) {
+      // Get messages after the last summary batch
+      const lastBatchEndMessageId =
+        lastSummaryBatch.summaries[lastSummaryBatch.summaries.length - 1]
+          ?.messageRange.endMessageId;
+      if (lastBatchEndMessageId) {
+        userMessagesSinceLastSummary = await this.getUserMessagesSince(
+          conversationId,
+          lastBatchEndMessageId
+        );
+      } else {
+        userMessagesSinceLastSummary = await this.getAllUserMessages(
+          conversationId
+        );
+      }
     } else {
       // Get all user messages for this conversation
-      userMessagesSinceLastSummary = await this.getAllUserMessages(conversationId);
+      userMessagesSinceLastSummary = await this.getAllUserMessages(
+        conversationId
+      );
     }
 
     console.log("📊 [SUMMARY-CHECK] Summary threshold check:", {
       conversationId,
-      hasLastSummary: !!lastSummary,
+      hasLastSummary: !!lastSummaryBatch,
       userMessagesSinceLastSummary: userMessagesSinceLastSummary.length,
       threshold: this.TURN_THRESHOLD,
-      needsSummary: userMessagesSinceLastSummary.length >= this.TURN_THRESHOLD
+      needsSummary: userMessagesSinceLastSummary.length >= this.TURN_THRESHOLD,
     });
 
     // Check if we've hit the threshold
     if (userMessagesSinceLastSummary.length >= this.TURN_THRESHOLD) {
-      console.log("📊 [SUMMARY-CREATE] Creating summary for", userMessagesSinceLastSummary.length, "messages");
-      return await this.createSummary(conversationId, userMessagesSinceLastSummary, lastSummary);
+      console.log(
+        "📊 [SUMMARY-CREATE] Creating topic-based summaries for",
+        userMessagesSinceLastSummary.length,
+        "messages"
+      );
+      return await this.createTopicBasedSummaries(
+        conversationId,
+        userMessagesSinceLastSummary
+      );
     }
 
     return null;
   }
 
-  private async getLatestSummary(conversationId: string): Promise<SummaryResult | null> {
-    const summary = await this.prisma.conversationSummary.findFirst({
+  private async getLatestSummaryBatch(
+    conversationId: string
+  ): Promise<SummaryBatchResult | null> {
+    const latestSummary = await this.prisma.conversationSummary.findFirst({
       where: { conversationId },
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
     });
 
-    if (!summary) return null;
+    if (!latestSummary || !latestSummary.batchId) return null;
+
+    const batchSummaries = await this.prisma.conversationSummary.findMany({
+      where: {
+        conversationId,
+        batchId: latestSummary.batchId,
+      },
+      orderBy: { createdAt: "asc" },
+    });
 
     return {
-      summaryText: summary.summaryText,
-      keyTopics: summary.keyTopics as string[],
-      messageRange: summary.messageRange as any,
-      summaryLevel: summary.summaryLevel,
+      summaries: batchSummaries.map((summary) => ({
+        id: summary.id,
+        topicName: summary.topicName,
+        summaryText: summary.summaryText,
+        relatedTopics: (summary.relatedTopics as string[]) || [],
+        messageRange: summary.messageRange as any,
+        summaryLevel: summary.summaryLevel,
+        topicRelevance: summary.topicRelevance,
+        batchId: summary.batchId || "",
+      })),
+      batchId: latestSummary.batchId,
+      totalTopics: batchSummaries.length,
     };
   }
 
-  private async getUserMessagesSince(conversationId: string, lastMessageId: string): Promise<MessageForSummary[]> {
+  private async getUserMessagesSince(
+    conversationId: string,
+    lastMessageId: string
+  ): Promise<MessageForSummary[]> {
     const lastMessage = await this.prisma.message.findUnique({
       where: { id: lastMessageId },
       select: { createdAt: true },
@@ -88,10 +148,10 @@ export class ConversationSummaryService {
     const messages = await this.prisma.message.findMany({
       where: {
         conversationId,
-        role: 'USER',
+        role: "USER",
         createdAt: { gt: lastMessage.createdAt },
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "asc" },
       select: {
         id: true,
         role: true,
@@ -103,13 +163,15 @@ export class ConversationSummaryService {
     return messages;
   }
 
-  private async getAllUserMessages(conversationId: string): Promise<MessageForSummary[]> {
+  private async getAllUserMessages(
+    conversationId: string
+  ): Promise<MessageForSummary[]> {
     const messages = await this.prisma.message.findMany({
       where: {
         conversationId,
-        role: 'USER',
+        role: "USER",
       },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "asc" },
       select: {
         id: true,
         role: true,
@@ -121,20 +183,60 @@ export class ConversationSummaryService {
     return messages;
   }
 
-  private async createSummary(
+  private async createTopicBasedSummaries(
     conversationId: string,
-    userMessages: MessageForSummary[],
-    lastSummary: SummaryResult | null
-  ): Promise<SummaryResult> {
+    userMessages: MessageForSummary[]
+  ): Promise<SummaryBatchResult> {
+    // Get all messages (user + assistant) in the range for topic extraction
     if (userMessages.length === 0) {
-      throw new Error('No messages to summarize');
+      throw new Error("No user messages to summarize");
     }
 
-    // Get all messages (user + assistant) in the range to summarize
-    const startDate = userMessages[0]!.createdAt;
-    const endDate = userMessages[userMessages.length - 1]!.createdAt;
+    const allMessages = await this.getAllMessagesInRange(
+      conversationId,
+      userMessages[0]!.createdAt,
+      userMessages[userMessages.length - 1]!.createdAt
+    );
 
-    const allMessagesInRange = await this.prisma.message.findMany({
+    // Extract granular topics from the conversation
+    const topicExtractionResult =
+      await this.topicExtractionService.extractGranularTopics(allMessages);
+
+    // Create summaries for each topic
+    const topicSummaries: TopicSummaryResult[] = [];
+
+    for (const topic of topicExtractionResult.topics) {
+      const topicSummary = await this.createTopicSummary(
+        conversationId,
+        topic,
+        allMessages,
+        topicExtractionResult.batchId
+      );
+      topicSummaries.push(topicSummary);
+    }
+
+    // Store all topic summaries in the database
+    await this.storeTopicSummaries(conversationId, topicSummaries, allMessages);
+
+    console.log(
+      "📊 [SUMMARY-COMPLETE] Created",
+      topicSummaries.length,
+      "topic-based summaries"
+    );
+
+    return {
+      summaries: topicSummaries,
+      batchId: topicExtractionResult.batchId,
+      totalTopics: topicSummaries.length,
+    };
+  }
+
+  private async getAllMessagesInRange(
+    conversationId: string,
+    startDate: Date,
+    endDate: Date
+  ): Promise<Message[]> {
+    return await this.prisma.message.findMany({
       where: {
         conversationId,
         createdAt: {
@@ -142,180 +244,128 @@ export class ConversationSummaryService {
           lte: endDate,
         },
       },
-      orderBy: { createdAt: 'asc' },
-      select: {
-        id: true,
-        role: true,
-        content: true,
-        createdAt: true,
-      },
+      orderBy: { createdAt: "asc" },
     });
-
-    // Generate summary using OpenAI
-    const summary = await this.generateSummary(allMessagesInRange, lastSummary);
-
-    // Store the summary
-    await this.storeSummary(conversationId, summary, allMessagesInRange);
-
-    return summary;
   }
 
-  private async generateSummary(
-    messages: MessageForSummary[],
-    lastSummary: SummaryResult | null
-  ): Promise<SummaryResult> {
-    if (messages.length === 0) {
-      throw new Error('No messages to generate summary');
-    }
-    const conversationText = messages
-      .map(msg => `${msg.role}: ${msg.content}`)
-      .join('\n');
-
-    let systemPrompt = `You are an expert conversation summarizer. Your task is to create a comprehensive yet concise summary of the conversation that preserves all important context, decisions, and information while being significantly shorter than the original.
-
-SUMMARIZATION RULES:
-1. Preserve all key information, decisions, and context
-2. Maintain the logical flow and progression of topics
-3. Include specific details that might be referenced later
-4. Extract key topics discussed
-5. Keep the summary comprehensive but concise
-6. Focus on actionable information and conclusions
-
-RESPONSE FORMAT (JSON):
-{
-  "summaryText": "Comprehensive summary preserving all key context and information",
-  "keyTopics": ["topic1", "topic2", "topic3"],
-  "summaryLevel": 1
-}
-
-GUIDELINES:
-- Summary should be 70-80% shorter than original while preserving context
-- Include specific technical details, decisions made, and conclusions reached
-- Maintain chronological flow of important events
-- Extract 3-7 key topics that were discussed`;
-
-    if (lastSummary) {
-      systemPrompt += `\n\nPREVIOUS SUMMARY CONTEXT:\nLevel ${lastSummary.summaryLevel} Summary: ${lastSummary.summaryText}\nPrevious Topics: ${lastSummary.keyTopics.join(', ')}\n\nThis new summary should build upon the previous context.`;
-    }
-
-    try {
-      const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o-mini',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          {
-            role: 'user',
-            content: `CONVERSATION TO SUMMARIZE:\n${conversationText}\n\nProvide a comprehensive summary in JSON format.`,
-          },
-        ],
-        temperature: 0.1,
-        max_tokens: 1500,
-      });
-
-      const summaryText = response.choices[0]?.message?.content;
-      if (!summaryText) {
-        throw new Error('No summary response received');
-      }
-
-      const summaryData = JSON.parse(summaryText);
-      
-      if (messages.length === 0) {
-        throw new Error('No messages to create summary range');
-      }
-
-      return {
-        summaryText: summaryData.summaryText,
-        keyTopics: summaryData.keyTopics || [],
-        messageRange: {
-          startMessageId: messages[0]!.id,
-          endMessageId: messages[messages.length - 1]!.id,
-          messageCount: messages.length,
-        },
-        summaryLevel: lastSummary ? lastSummary.summaryLevel + 1 : 1,
-      };
-    } catch (error) {
-      console.error('Summary generation failed:', error);
-      
-      // Fallback summary
-      if (messages.length === 0) {
-        throw new Error('Cannot create fallback summary with no messages');
-      }
-
-      return {
-        summaryText: `Conversation summary (${messages.length} messages): Discussion covering various topics. Summary generation failed, but conversation context preserved.`,
-        keyTopics: ['general_discussion'],
-        messageRange: {
-          startMessageId: messages[0]!.id,
-          endMessageId: messages[messages.length - 1]!.id,
-          messageCount: messages.length,
-        },
-        summaryLevel: lastSummary ? lastSummary.summaryLevel + 1 : 1,
-      };
-    }
-  }
-
-  private async storeSummary(
+  private async createTopicSummary(
     conversationId: string,
-    summary: SummaryResult,
-    messages: MessageForSummary[]
-  ): Promise<void> {
-    // Create the summary first
-    const createdSummary = await this.prisma.conversationSummary.create({
-      data: {
-        conversationId,
-        summaryText: summary.summaryText,
-        keyTopics: summary.keyTopics,
-        messageRange: summary.messageRange,
-        summaryLevel: summary.summaryLevel,
-      },
-    });
-
-    // Update all messages in the range to point to this summary
-    if (messages.length > 0) {
-      const startDate = messages[0]!.createdAt;
-      const endDate = messages[messages.length - 1]!.createdAt;
-
-      await this.prisma.message.updateMany({
-        where: {
-          conversationId,
-          createdAt: {
-            gte: startDate,
-            lte: endDate,
-          },
-          summaryId: null, // Only update messages that don't already have a summaryId
-        },
-        data: {
-          summaryId: createdSummary.id,
-        },
-      });
-
-      console.log(`📝 [SUMMARY] Linked ${messages.length} messages to summary ${createdSummary.id}`);
+    topic: ExtractedTopic,
+    allMessages: Message[],
+    batchId: string
+  ): Promise<TopicSummaryResult> {
+    if (allMessages.length === 0) {
+      throw new Error("No messages available for topic summary");
     }
+
+    return {
+      id: `topic_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      topicName: topic.topicName,
+      summaryText: topic.summary,
+      relatedTopics: topic.relatedTopics,
+      messageRange: {
+        startMessageId: allMessages[0]!.id,
+        endMessageId: allMessages[allMessages.length - 1]!.id,
+        messageCount: allMessages.length,
+      },
+      summaryLevel: 1,
+      topicRelevance: topic.relevanceScore,
+      batchId,
+    };
   }
 
-  async getAllSummaries(conversationId: string): Promise<SummaryResult[]> {
+  private async storeTopicSummaries(
+    conversationId: string,
+    summaries: TopicSummaryResult[],
+    messages: Message[]
+  ): Promise<void> {
+    // Create all topic summaries in a transaction
+    await this.prisma.$transaction(async (tx) => {
+      const createdSummaries = [];
+
+      for (const summary of summaries) {
+        const createdSummary = await tx.conversationSummary.create({
+          data: {
+            conversationId,
+            topicName: summary.topicName,
+            summaryText: summary.summaryText,
+            relatedTopics: summary.relatedTopics,
+            messageRange: summary.messageRange,
+            summaryLevel: summary.summaryLevel,
+            topicRelevance: summary.topicRelevance,
+            batchId: summary.batchId,
+          },
+        });
+        createdSummaries.push(createdSummary);
+      }
+
+      // Link all messages to the first summary in the batch (for reference)
+      if (createdSummaries.length > 0 && createdSummaries[0]) {
+        const primarySummaryId = createdSummaries[0].id;
+        await tx.message.updateMany({
+          where: {
+            id: { in: messages.map((m) => m.id) },
+          },
+          data: {
+            summaryId: primarySummaryId,
+          },
+        });
+      }
+    });
+  }
+
+  async getAllSummaries(conversationId: string): Promise<TopicSummaryResult[]> {
     const summaries = await this.prisma.conversationSummary.findMany({
       where: { conversationId },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "desc" },
     });
 
-    return summaries.map(summary => ({
+    return summaries.map((summary) => ({
+      id: summary.id,
+      topicName: summary.topicName,
       summaryText: summary.summaryText,
-      keyTopics: summary.keyTopics as string[],
+      relatedTopics: (summary.relatedTopics as string[]) || [],
       messageRange: summary.messageRange as any,
       summaryLevel: summary.summaryLevel,
+      topicRelevance: summary.topicRelevance,
+      batchId: summary.batchId || "",
     }));
   }
 
-  async getMessageCountSinceLastSummary(conversationId: string): Promise<number> {
-    const lastSummary = await this.getLatestSummary(conversationId);
-    
-    if (lastSummary) {
-      const userMessages = await this.getUserMessagesSince(conversationId, lastSummary.messageRange.endMessageId);
-      return userMessages.length;
-    } else {
-      const userMessages = await this.getAllUserMessages(conversationId);
-      return userMessages.length;
+  async getMessageCountSinceLastSummary(
+    conversationId: string
+  ): Promise<number> {
+    const lastSummary = await this.prisma.conversationSummary.findFirst({
+      where: { conversationId },
+      orderBy: { createdAt: "desc" },
+    });
+
+    if (!lastSummary) {
+      // Count all user messages
+      return await this.prisma.message.count({
+        where: {
+          conversationId,
+          role: "USER",
+        },
+      });
     }
+
+    const messageRange = lastSummary.messageRange as any;
+    const lastMessageId = messageRange.endMessageId;
+
+    const lastMessage = await this.prisma.message.findUnique({
+      where: { id: lastMessageId },
+      select: { createdAt: true },
+    });
+
+    if (!lastMessage) return 0;
+
+    return await this.prisma.message.count({
+      where: {
+        conversationId,
+        role: "USER",
+        createdAt: { gt: lastMessage.createdAt },
+      },
+    });
   }
 }

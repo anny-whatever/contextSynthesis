@@ -319,9 +319,12 @@ router.get(
       select: {
         id: true,
         summaryText: true,
-        keyTopics: true,
+        topicName: true,
+        relatedTopics: true,
         messageRange: true,
         summaryLevel: true,
+        topicRelevance: true,
+        batchId: true,
         createdAt: true,
         updatedAt: true,
       },

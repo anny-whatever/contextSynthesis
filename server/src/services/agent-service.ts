@@ -8,7 +8,7 @@ import {
 } from "./intent-analysis-service";
 import {
   ConversationSummaryService,
-  SummaryResult,
+  SummaryBatchResult,
 } from "./conversation-summary-service";
 import {
   AgentConfig,
@@ -145,11 +145,10 @@ Always be helpful, accurate, and cite your sources when using web search results
         );
 
       if (summaryResult) {
-        console.log("📊 [AGENT] Created conversation summary:", {
-          messageCount: summaryResult.messageRange.messageCount,
-          summaryLevel: summaryResult.summaryLevel,
-          keyTopics: summaryResult.keyTopics,
-          summaryText: summaryResult.summaryText.substring(0, 100) + "..."
+        console.log("📊 [AGENT] Created conversation summary batch:", {
+          batchId: summaryResult.batchId,
+          topicCount: summaryResult.summaries.length,
+          topics: summaryResult.summaries.map((s: any) => s.topicName).join(', ')
         });
       } else {
         console.log("📊 [AGENT] No summary created - threshold not met or other condition");
@@ -572,18 +571,23 @@ Use this context to provide more relevant and focused responses that align with 
               toolUsages: true,
             },
           },
-          // Load summaries separately for context
-          summaries: {
-            orderBy: { createdAt: "asc" },
-            select: {
-              id: true,
-              summaryText: true,
-              keyTopics: true,
-              messageRange: true,
-              summaryLevel: true,
-              createdAt: true,
-            },
-          },
+        },
+      });
+
+      // Load summaries separately since they're not directly related to conversation
+      const conversationSummaries = await this.prisma.conversationSummary.findMany({
+        where: { conversationId },
+        orderBy: { createdAt: "asc" },
+        select: {
+          id: true,
+          summaryText: true,
+          topicName: true,
+          relatedTopics: true,
+          messageRange: true,
+          summaryLevel: true,
+          topicRelevance: true,
+          batchId: true,
+          createdAt: true,
         },
       });
 
@@ -621,12 +625,15 @@ Use this context to provide more relevant and focused responses that align with 
       );
 
       // Add summaries to metadata for use in system prompt
-      const summaries = conversation.summaries.map(summary => ({
+      const summaries = conversationSummaries.map((summary: any) => ({
         id: summary.id,
         summaryText: summary.summaryText,
-        keyTopics: summary.keyTopics as string[],
+        topicName: summary.topicName,
+        relatedTopics: summary.relatedTopics as string[],
         messageRange: summary.messageRange as any,
         summaryLevel: summary.summaryLevel,
+        topicRelevance: summary.topicRelevance,
+        batchId: summary.batchId,
         createdAt: summary.createdAt,
       }));
 
@@ -634,7 +641,7 @@ Use this context to provide more relevant and focused responses that align with 
         conversationId,
         summariesCount: summaries.length,
         recentMessagesCount: messageHistory.length,
-        totalContextReduction: summaries.reduce((acc, s) => acc + (s.messageRange as any)?.messageCount || 0, 0),
+        totalContextReduction: summaries.reduce((acc: number, s: any) => acc + (s.messageRange as any)?.messageCount || 0, 0),
       });
 
       return {

@@ -22,9 +22,11 @@ export interface ConversationContext {
   }>;
   summaries: Array<{
     summaryText: string;
-    keyTopics: any;
+    topicName: string;
+    relatedTopics: any;
     messageRange: any;
     summaryLevel: number;
+    topicRelevance: number;
   }>;
   lastIntentAnalysis?: {
     currentIntent: string;
@@ -83,9 +85,11 @@ export class IntentAnalysisService {
       orderBy: { createdAt: 'asc' }, // Changed to asc for chronological order
       select: {
         summaryText: true,
-        keyTopics: true,
+        topicName: true,
+        relatedTopics: true,
         messageRange: true,
         summaryLevel: true,
+        topicRelevance: true,
       },
     });
 
@@ -263,7 +267,11 @@ GUIDELINES:
       contextText += 'CONVERSATION SUMMARIES:\n';
       context.summaries.forEach((summary, index) => {
         contextText += `Summary ${index + 1} (Level ${summary.summaryLevel}): ${summary.summaryText}\n`;
-        contextText += `Key Topics: ${(summary.keyTopics as string[]).join(', ')}\n\n`;
+        contextText += `Topic: ${summary.topicName} (Relevance: ${summary.topicRelevance})\n`;
+        if (summary.relatedTopics && Array.isArray(summary.relatedTopics)) {
+          contextText += `Related Topics: ${(summary.relatedTopics as string[]).join(', ')}\n`;
+        }
+        contextText += '\n';
       });
     }
 

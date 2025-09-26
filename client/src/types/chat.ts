@@ -57,14 +57,17 @@ export interface ChatRequest {
 export interface Summary {
   id: string;
   conversationId: string;
+  topicName: string;
   summaryText: string;
-  keyTopics: string[];
+  relatedTopics?: string[];
   messageRange: {
     startMessageId: string;
     endMessageId: string;
     messageCount: number;
   };
   summaryLevel: number;
+  topicRelevance: number;
+  batchId?: string;
   createdAt: Date;
   updatedAt: Date;
 }

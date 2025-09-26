@@ -355,23 +355,52 @@ export function ContextSidebar({
                             </p>
                           </div>
 
-                          {/* Key Topics */}
-                          {summary.keyTopics?.length > 0 && (
+                          {/* Topic Information */}
+                          {summary.topicName && (
                             <div>
                               <h4 className="text-xs font-medium text-muted-foreground mb-1">
-                                Topics
+                                Topic
                               </h4>
-                              <div className="flex flex-wrap gap-1">
-                                {summary.keyTopics.map((topic: string, index: number) => (
+                              <div className="flex flex-wrap gap-1 mb-2">
+                                <Badge
+                                  variant="default"
+                                  className="text-xs px-2 py-0.5 h-auto"
+                                >
+                                  {summary.topicName}
+                                </Badge>
+                                {summary.topicRelevance && (
                                   <Badge
-                                    key={index}
-                                    variant="secondary"
-                                    className="text-xs px-2 py-0.5 h-auto"
+                                    variant="outline"
+                                    className={`text-xs px-2 py-0.5 h-auto ${
+                                      summary.topicRelevance >= 0.8
+                                        ? 'bg-green-50 text-green-700 border-green-200'
+                                        : summary.topicRelevance >= 0.6
+                                        ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
+                                        : 'bg-red-50 text-red-700 border-red-200'
+                                    }`}
                                   >
-                                    {topic}
+                                    {(summary.topicRelevance * 100).toFixed(0)}% relevant
                                   </Badge>
-                                ))}
+                                )}
                               </div>
+                              {summary.relatedTopics && summary.relatedTopics.length > 0 && (
+                                <div>
+                                  <h5 className="text-xs font-medium text-muted-foreground mb-1">
+                                    Related Topics
+                                  </h5>
+                                  <div className="flex flex-wrap gap-1">
+                                    {summary.relatedTopics.map((topic: string, index: number) => (
+                                      <Badge
+                                        key={index}
+                                        variant="secondary"
+                                        className="text-xs px-2 py-0.5 h-auto"
+                                      >
+                                        {topic}
+                                      </Badge>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           )}
 
