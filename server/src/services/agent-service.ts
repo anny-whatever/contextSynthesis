@@ -154,9 +154,11 @@ export class AgentService {
       const existingConversation = await this.prisma.conversation.findUnique({
         where: { id: conversationId },
       });
-      
+
       if (!existingConversation) {
-        console.log("📝 [AGENT] Conversation not found, creating:", { conversationId });
+        console.log("📝 [AGENT] Conversation not found, creating:", {
+          conversationId,
+        });
         await this.prisma.conversation.create({
           data: {
             id: conversationId,
@@ -164,7 +166,9 @@ export class AgentService {
             userId: request.userId || "anonymous",
           },
         });
-        console.log("📝 [AGENT] Created conversation with provided ID:", { conversationId });
+        console.log("📝 [AGENT] Created conversation with provided ID:", {
+          conversationId,
+        });
       }
     }
 
@@ -228,7 +232,10 @@ export class AgentService {
       const updatedIntentAnalysis = smartContextResult.updatedIntentAnalysis;
 
       // Prepare messages for OpenAI with intent analysis context
-      const messages = this.prepareMessagesForOpenAI(context, updatedIntentAnalysis);
+      const messages = this.prepareMessagesForOpenAI(
+        context,
+        updatedIntentAnalysis
+      );
 
       // Console logging: System prompt and messages
       console.log("💬 [AGENT] Prepared messages for OpenAI:", {
@@ -619,7 +626,8 @@ export class AgentService {
         }
       } catch (error) {
         const duration = Date.now() - startTime;
-        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        const errorMessage =
+          error instanceof Error ? error.message : "Unknown error";
 
         results.push({
           toolName: toolCall.function.name,
@@ -754,10 +762,18 @@ ${
 **Confidence Level**: ${intentAnalysis.confidenceLevel}
 **Confidence Score**: ${(intentAnalysis.confidenceScore * 100).toFixed(1)}%
 **Confidence Factors**:
-- Search Result Quality: ${(intentAnalysis.confidenceFactors.searchResultQuality || 0.5 * 100).toFixed(1)}%
-- Context Availability: ${(intentAnalysis.confidenceFactors.contextAvailability || 0.5 * 100).toFixed(1)}%
-- Query Specificity: ${(intentAnalysis.confidenceFactors.querySpecificity || 0.5 * 100).toFixed(1)}%
-- Historical Match: ${(intentAnalysis.confidenceFactors.historicalMatch || 0.5 * 100).toFixed(1)}%
+- Search Result Quality: ${(
+        intentAnalysis.confidenceFactors.searchResultQuality || 0.5 * 100
+      ).toFixed(1)}%
+- Context Availability: ${(
+        intentAnalysis.confidenceFactors.contextAvailability || 0.5 * 100
+      ).toFixed(1)}%
+- Query Specificity: ${(
+        intentAnalysis.confidenceFactors.querySpecificity || 0.5 * 100
+      ).toFixed(1)}%
+- Historical Match: ${(
+        intentAnalysis.confidenceFactors.historicalMatch || 0.5 * 100
+      ).toFixed(1)}%
 
 ${this.getConfidenceGuidance(intentAnalysis)}
 
@@ -806,75 +822,120 @@ Use this context to provide more relevant and focused responses that align with 
     const relationshipToHistory = intentAnalysis.relationshipToHistory;
     const confidenceScore = intentAnalysis.confidenceScore;
     const factors = intentAnalysis.confidenceFactors;
-    
+
     // Get search result quality information
     const searchQuality = factors.searchResultQuality || 0.5; // Default to medium quality if undefined
     const hasStrongMatches = searchQuality >= 0.8;
     const hasGoodMatches = searchQuality >= 0.6;
-    
+
     if (relationshipToHistory === "recall") {
       if (confidenceLevel === "high") {
         if (hasStrongMatches) {
-          return `**CONFIDENCE GUIDANCE**: You have HIGH confidence with STRONG search results (quality: ${(searchQuality * 100).toFixed(0)}%). When presenting information from tools, be confident and direct. Use phrases like "I remember we discussed..." or "Yes, we talked about..." The search results are highly relevant and reliable.`;
+          return `**CONFIDENCE GUIDANCE**: You have HIGH confidence with STRONG search results (quality: ${(
+            searchQuality * 100
+          ).toFixed(
+            0
+          )}%). When presenting information from tools, be confident and direct. Use phrases like "I remember we discussed..." or "Yes, we talked about..." The search results are highly relevant and reliable.`;
         } else {
-          return `**CONFIDENCE GUIDANCE**: You have HIGH confidence but search results are moderate (quality: ${(searchQuality * 100).toFixed(0)}%). Present information confidently but acknowledge if results aren't perfect matches. Use "I believe we discussed..." or "Based on what I found..."`;
+          return `**CONFIDENCE GUIDANCE**: You have HIGH confidence but search results are moderate (quality: ${(
+            searchQuality * 100
+          ).toFixed(
+            0
+          )}%). Present information confidently but acknowledge if results aren't perfect matches. Use "I believe we discussed..." or "Based on what I found..."`;
         }
       } else if (confidenceLevel === "medium") {
         if (hasGoodMatches) {
-          return `**CONFIDENCE GUIDANCE**: You have MEDIUM confidence with good search results (quality: ${(searchQuality * 100).toFixed(0)}%). Present relevant findings with moderate confidence. Use "I found some information about..." or "This might be what you're referring to..." Be honest about uncertainty while still being helpful.`;
+          return `**CONFIDENCE GUIDANCE**: You have MEDIUM confidence with good search results (quality: ${(
+            searchQuality * 100
+          ).toFixed(
+            0
+          )}%). Present relevant findings with moderate confidence. Use "I found some information about..." or "This might be what you're referring to..." Be honest about uncertainty while still being helpful.`;
         } else {
-          return `**CONFIDENCE GUIDANCE**: You have MEDIUM confidence with limited search results (quality: ${(searchQuality * 100).toFixed(0)}%). Be cautious about claiming certainty. Use "I found some potentially related information..." and ask for clarification to ensure accuracy.`;
+          return `**CONFIDENCE GUIDANCE**: You have MEDIUM confidence with limited search results (quality: ${(
+            searchQuality * 100
+          ).toFixed(
+            0
+          )}%). Be cautious about claiming certainty. Use "I found some potentially related information..." and ask for clarification to ensure accuracy.`;
         }
       } else {
-        return `**CONFIDENCE GUIDANCE**: You have LOW confidence with weak search results (quality: ${(searchQuality * 100).toFixed(0)}%). Be very cautious about making claims. Use phrases like "I found some information that might be related..." or "Let me search more specifically..." Always ask for clarification and be transparent about limitations.`;
+        return `**CONFIDENCE GUIDANCE**: You have LOW confidence with weak search results (quality: ${(
+          searchQuality * 100
+        ).toFixed(
+          0
+        )}%). Be very cautious about making claims. Use phrases like "I found some information that might be related..." or "Let me search more specifically..." Always ask for clarification and be transparent about limitations.`;
       }
     } else {
       // For non-recall queries, provide general confidence guidance
       if (confidenceLevel === "high") {
         if (hasStrongMatches) {
-          return `**CONFIDENCE GUIDANCE**: You have HIGH confidence with excellent context (quality: ${(searchQuality * 100).toFixed(0)}%). Present information clearly and directly. The available context is highly relevant and comprehensive.`;
+          return `**CONFIDENCE GUIDANCE**: You have HIGH confidence with excellent context (quality: ${(
+            searchQuality * 100
+          ).toFixed(
+            0
+          )}%). Present information clearly and directly. The available context is highly relevant and comprehensive.`;
         } else {
-          return `**CONFIDENCE GUIDANCE**: You have HIGH confidence with moderate context (quality: ${(searchQuality * 100).toFixed(0)}%). Present information clearly while noting any limitations in the available context.`;
+          return `**CONFIDENCE GUIDANCE**: You have HIGH confidence with moderate context (quality: ${(
+            searchQuality * 100
+          ).toFixed(
+            0
+          )}%). Present information clearly while noting any limitations in the available context.`;
         }
       } else if (confidenceLevel === "medium") {
-        return `**CONFIDENCE GUIDANCE**: You have MEDIUM confidence with available context (quality: ${(searchQuality * 100).toFixed(0)}%). Present information while acknowledging any limitations or uncertainties. Be helpful but honest about what you can and cannot determine.`;
+        return `**CONFIDENCE GUIDANCE**: You have MEDIUM confidence with available context (quality: ${(
+          searchQuality * 100
+        ).toFixed(
+          0
+        )}%). Present information while acknowledging any limitations or uncertainties. Be helpful but honest about what you can and cannot determine.`;
       } else {
-        return `**CONFIDENCE GUIDANCE**: You have LOW confidence with limited context (quality: ${(searchQuality * 100).toFixed(0)}%). Be transparent about limitations and actively seek clarification or additional context through tools. Focus on asking good questions to better understand the user's needs.`;
+        return `**CONFIDENCE GUIDANCE**: You have LOW confidence with limited context (quality: ${(
+          searchQuality * 100
+        ).toFixed(
+          0
+        )}%). Be transparent about limitations and actively seek clarification or additional context through tools. Focus on asking good questions to better understand the user's needs.`;
       }
     }
   }
 
-  private getContextUsageGuidance(intentAnalysis: IntentAnalysisResult): string {
+  private getContextUsageGuidance(
+    intentAnalysis: IntentAnalysisResult
+  ): string {
     const strategy = intentAnalysis.contextRetrievalStrategy;
     const relationshipToHistory = intentAnalysis.relationshipToHistory;
-    const searchQuality = intentAnalysis.confidenceFactors.searchResultQuality || 0.5;
+    const searchQuality =
+      intentAnalysis.confidenceFactors.searchResultQuality || 0.5;
     const confidenceLevel = intentAnalysis.confidenceLevel;
-    
+
     // Add confidence indicator based on search quality
-    const qualityIndicator = searchQuality >= 0.8 ? "🟢 High-quality context available" :
-                           searchQuality >= 0.6 ? "🟡 Moderate-quality context available" :
-                           "🔴 Limited context quality";
-    
-    const confidenceNote = confidenceLevel === "high" ? " (High confidence)" :
-                          confidenceLevel === "medium" ? " (Medium confidence)" :
-                          " (Low confidence - be cautious)";
-    
+    const qualityIndicator =
+      searchQuality >= 0.8
+        ? "🟢 High-quality context available"
+        : searchQuality >= 0.6
+        ? "🟡 Moderate-quality context available"
+        : "🔴 Limited context quality";
+
+    const confidenceNote =
+      confidenceLevel === "high"
+        ? " (High confidence)"
+        : confidenceLevel === "medium"
+        ? " (Medium confidence)"
+        : " (Low confidence - be cautious)";
+
     switch (strategy) {
       case "none":
         return `**Focus**: This appears to be a standalone query. You have minimal immediate context (last 1 turn). Use tools to search for any relevant background if needed. ${qualityIndicator}${confidenceNote}`;
-      
+
       case "recent_only":
         return `**Focus**: This query relates to recent conversation. You have the last 1 turn available, but use tools to search for additional recent context if the user references anything beyond the immediate exchange. ${qualityIndicator}${confidenceNote}`;
-      
+
       case "semantic_search":
         return `**Focus**: This query requires specific historical knowledge. Use the retrieved summaries and historical context from tools as your primary source. The minimal immediate context (last 1 turn) is just for conversational flow. ${qualityIndicator}${confidenceNote}`;
-      
+
       case "date_based_search":
         return `**Focus**: This query is about specific time periods. Use the retrieved historical context from tools as your main source. The immediate context is minimal - rely on the date-based search results. ${qualityIndicator}${confidenceNote}`;
-      
+
       case "all_available":
         return `**Focus**: This query requires comprehensive context. Use all available historical context from tools. Don't rely on the minimal immediate context - the tools provide the comprehensive information needed. ${qualityIndicator}${confidenceNote}`;
-      
+
       default:
         // Fallback based on relationship to history
         if (relationshipToHistory === "recall") {
@@ -895,12 +956,15 @@ Use this context to provide more relevant and focused responses that align with 
     conversationId: string,
     intentAnalysis: IntentAnalysisResult,
     userId?: string
-  ): Promise<{ context: ConversationContext; updatedIntentAnalysis: IntentAnalysisResult }> {
+  ): Promise<{
+    context: ConversationContext;
+    updatedIntentAnalysis: IntentAnalysisResult;
+  }> {
     try {
       // Reduced to 1 turn (2 messages) to force tool usage for better recall
       // This provides minimal immediate context to encourage using tools for historical context
       let recentMessageLimit = 2; // Minimum: last 1 turn (reduced from 3 turns)
-      
+
       // Adjust based on context retrieval strategy
       switch (intentAnalysis.contextRetrievalStrategy) {
         case "none":
@@ -972,10 +1036,11 @@ Use this context to provide more relevant and focused responses that align with 
       );
 
       // Update confidence scores based on actual search results
-      const updatedIntentAnalysis = this.intentAnalysisService.updateConfidenceWithSearchResults(
-        intentAnalysis,
-        smartContextResult
-      );
+      const updatedIntentAnalysis =
+        this.intentAnalysisService.updateConfidenceWithSearchResults(
+          intentAnalysis,
+          smartContextResult
+        );
 
       console.log(`🧠 [SMART CONTEXT] Retrieved context:`, {
         conversationId,
@@ -1253,26 +1318,36 @@ Use this context to provide more relevant and focused responses that align with 
     intentAnalysis: IntentAnalysisResult,
     toolsUsed: ToolUsageContext[],
     context: ConversationContext
-  ): { actionsPerformed: string[]; contextUsed: string; decisionProcess: string } {
+  ): {
+    actionsPerformed: string[];
+    contextUsed: string;
+    decisionProcess: string;
+  } {
     const actionsPerformed: string[] = [];
-    
+
     // Document actions taken
-    actionsPerformed.push(`Analyzed user intent: "${intentAnalysis.currentIntent}"`);
-    
+    actionsPerformed.push(
+      `Analyzed user intent: "${intentAnalysis.currentIntent}"`
+    );
+
     if (toolsUsed.length > 0) {
-      const successfulTools = toolsUsed.filter(tool => tool.success);
-      const failedTools = toolsUsed.filter(tool => !tool.success);
-      
-      successfulTools.forEach(tool => {
+      const successfulTools = toolsUsed.filter((tool) => tool.success);
+      const failedTools = toolsUsed.filter((tool) => !tool.success);
+
+      successfulTools.forEach((tool) => {
         actionsPerformed.push(`Successfully executed ${tool.toolName} tool`);
       });
-      
-      failedTools.forEach(tool => {
-        actionsPerformed.push(`Attempted ${tool.toolName} tool (encountered issues)`);
+
+      failedTools.forEach((tool) => {
+        actionsPerformed.push(
+          `Attempted ${tool.toolName} tool (encountered issues)`
+        );
       });
     }
-    
-    actionsPerformed.push("Generated response based on analysis and available context");
+
+    actionsPerformed.push(
+      "Generated response based on analysis and available context"
+    );
 
     // Explain context usage
     let contextUsed: string;
@@ -1288,18 +1363,22 @@ Use this context to provide more relevant and focused responses that align with 
     const decisionProcess = [
       `I analyzed your message with ${intentAnalysis.confidenceScore}% confidence in understanding your intent.`,
       `Based on the ${intentAnalysis.contextualRelevance} relevance to our conversation history, I chose a ${intentAnalysis.contextRetrievalStrategy} approach.`,
-      toolsUsed.length > 0 
-        ? `I determined that ${toolsUsed.length} tool${toolsUsed.length > 1 ? 's were' : ' was'} needed to provide a complete response.`
+      toolsUsed.length > 0
+        ? `I determined that ${toolsUsed.length} tool${
+            toolsUsed.length > 1 ? "s were" : " was"
+          } needed to provide a complete response.`
         : `I determined that I could provide a complete response without using external tools.`,
       intentAnalysis.keyTopics && intentAnalysis.keyTopics.length > 0
-        ? `I focused on these key topics: ${intentAnalysis.keyTopics.join(', ')}.`
-        : `I addressed your request comprehensively without identifying specific topic constraints.`
-    ].join(' ');
+        ? `I focused on these key topics: ${intentAnalysis.keyTopics.join(
+            ", "
+          )}.`
+        : `I addressed your request comprehensively without identifying specific topic constraints.`,
+    ].join(" ");
 
     return {
       actionsPerformed,
       contextUsed,
-      decisionProcess
+      decisionProcess,
     };
   }
 }

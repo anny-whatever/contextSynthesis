@@ -12,6 +12,7 @@ import { sanitizeInput } from './middleware/validation';
 
 // Route imports
 import chatRoutes from './routes/chat';
+import analyticsRoutes from './routes/analytics';
 
 // Initialize Prisma
 const prisma = new PrismaClient();
@@ -73,6 +74,7 @@ app.get('/health', (req, res) => {
 
 // API routes
 app.use('/api/chat', chatRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 // 404 handler
 app.use(notFoundHandler);

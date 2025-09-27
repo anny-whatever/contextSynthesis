@@ -1,5 +1,10 @@
 import { PrismaClient, UsageOperationType } from "@prisma/client";
-import { CostService, TokenUsage, WebSearchUsage, CostCalculation } from "./cost-service";
+import {
+  CostService,
+  TokenUsage,
+  WebSearchUsage,
+  CostCalculation,
+} from "./cost-service";
 
 export interface UsageTrackingData {
   conversationId?: string;
@@ -94,11 +99,13 @@ export class UsageTrackingService {
       if (data.conversationId) createData.conversationId = data.conversationId;
       if (data.messageId) createData.messageId = data.messageId;
       if (data.userId) createData.userId = data.userId;
-      if (data.operationSubtype) createData.operationSubtype = data.operationSubtype;
+      if (data.operationSubtype)
+        createData.operationSubtype = data.operationSubtype;
       if (data.duration) createData.duration = data.duration;
       if (data.errorMessage) createData.errorMessage = data.errorMessage;
       if (data.batchId) createData.batchId = data.batchId;
-      if (data.metadata) createData.metadata = JSON.parse(JSON.stringify(data.metadata));
+      if (data.metadata)
+        createData.metadata = JSON.parse(JSON.stringify(data.metadata));
 
       const usageRecord = await this.prisma.usageTracking.create({
         data: createData,
@@ -117,16 +124,25 @@ export class UsageTrackingService {
       return usageRecord.id;
     } catch (error) {
       console.error("Failed to track usage:", error);
-      throw new Error(`Usage tracking failed: ${error instanceof Error ? error.message : "Unknown error"}`);
+      throw new Error(
+        `Usage tracking failed: ${
+          error instanceof Error ? error.message : "Unknown error"
+        }`
+      );
     }
   }
 
   /**
    * Track multiple operations in a batch (e.g., for summarization)
    */
-  async trackBatchUsage(operations: UsageTrackingData[], batchId?: string): Promise<string[]> {
-    const generatedBatchId = batchId || `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+  async trackBatchUsage(
+    operations: UsageTrackingData[],
+    batchId?: string
+  ): Promise<string[]> {
+    const generatedBatchId =
+      batchId ||
+      `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
     const results: string[] = [];
     for (const operation of operations) {
       const usageId = await this.trackUsage({
@@ -140,8 +156,15 @@ export class UsageTrackingService {
       batchId: generatedBatchId,
       operationCount: operations.length,
       totalCost: operations.reduce((sum, op) => {
-        const tokenUsage: TokenUsage = { inputTokens: op.inputTokens, outputTokens: op.outputTokens };
-        const cost = CostService.calculateCost(op.model, tokenUsage, op.webSearchUsage);
+        const tokenUsage: TokenUsage = {
+          inputTokens: op.inputTokens,
+          outputTokens: op.outputTokens,
+        };
+        const cost = CostService.calculateCost(
+          op.model,
+          tokenUsage,
+          op.webSearchUsage
+        );
         return sum + cost.totalCost;
       }, 0),
     });
@@ -154,10 +177,12 @@ export class UsageTrackingService {
    */
   async getUsageAnalytics(filters: UsageFilters = {}): Promise<UsageAnalytics> {
     const whereClause: any = {};
-    
-    if (filters.conversationId) whereClause.conversationId = filters.conversationId;
+
+    if (filters.conversationId)
+      whereClause.conversationId = filters.conversationId;
     if (filters.userId) whereClause.userId = filters.userId;
-    if (filters.operationType) whereClause.operationType = filters.operationType;
+    if (filters.operationType)
+      whereClause.operationType = filters.operationType;
     if (filters.model) whereClause.model = filters.model;
     if (filters.success !== undefined) whereClause.success = filters.success;
     if (filters.startDate || filters.endDate) {
@@ -167,42 +192,43 @@ export class UsageTrackingService {
     }
 
     // Get aggregated data
-    const [totalStats, operationBreakdown, modelBreakdown, dailyUsage] = await Promise.all([
-      // Total stats
-      this.prisma.usageTracking.aggregate({
-        where: whereClause,
-        _sum: {
-          totalCost: true,
-          totalTokens: true,
-          inputTokens: true,
-          outputTokens: true,
-        },
-      }),
+    const [totalStats, operationBreakdown, modelBreakdown, dailyUsage] =
+      await Promise.all([
+        // Total stats
+        this.prisma.usageTracking.aggregate({
+          where: whereClause,
+          _sum: {
+            totalCost: true,
+            totalTokens: true,
+            inputTokens: true,
+            outputTokens: true,
+          },
+        }),
 
-      // Operation breakdown
-      this.prisma.usageTracking.groupBy({
-        by: ['operationType'],
-        where: whereClause,
-        _count: { id: true },
-        _sum: {
-          totalCost: true,
-          totalTokens: true,
-        },
-      }),
+        // Operation breakdown
+        this.prisma.usageTracking.groupBy({
+          by: ["operationType"],
+          where: whereClause,
+          _count: { id: true },
+          _sum: {
+            totalCost: true,
+            totalTokens: true,
+          },
+        }),
 
-      // Model breakdown
-      this.prisma.usageTracking.groupBy({
-        by: ['model'],
-        where: whereClause,
-        _count: { id: true },
-        _sum: {
-          totalCost: true,
-          totalTokens: true,
-        },
-      }),
+        // Model breakdown
+        this.prisma.usageTracking.groupBy({
+          by: ["model"],
+          where: whereClause,
+          _count: { id: true },
+          _sum: {
+            totalCost: true,
+            totalTokens: true,
+          },
+        }),
 
-      // Daily usage (last 30 days)
-      this.prisma.$queryRaw`
+        // Daily usage (last 30 days)
+        this.prisma.$queryRaw`
         SELECT 
           DATE(created_at) as date,
           SUM(total_cost) as total_cost,
@@ -211,17 +237,21 @@ export class UsageTrackingService {
           COUNT(*) as count
         FROM usage_tracking 
         WHERE created_at >= NOW() - INTERVAL '30 days'
-        ${filters.conversationId ? `AND conversation_id = ${filters.conversationId}` : ''}
-        ${filters.userId ? `AND user_id = ${filters.userId}` : ''}
+        ${
+          filters.conversationId
+            ? `AND conversation_id = ${filters.conversationId}`
+            : ""
+        }
+        ${filters.userId ? `AND user_id = ${filters.userId}` : ""}
         GROUP BY DATE(created_at), operation_type
         ORDER BY date DESC
       `,
-    ]);
+      ]);
 
     // Process daily usage data
     const dailyUsageMap = new Map<string, any>();
     (dailyUsage as any[]).forEach((row: any) => {
-      const dateStr = row.date.toISOString().split('T')[0];
+      const dateStr = row.date.toISOString().split("T")[0];
       if (!dailyUsageMap.has(dateStr)) {
         dailyUsageMap.set(dateStr, {
           date: dateStr,
@@ -253,8 +283,8 @@ export class UsageTrackingService {
         totalCost: model._sum.totalCost || 0,
         totalTokens: model._sum.totalTokens || 0,
       })),
-      dailyUsage: Array.from(dailyUsageMap.values()).sort((a, b) => 
-        new Date(b.date).getTime() - new Date(a.date).getTime()
+      dailyUsage: Array.from(dailyUsageMap.values()).sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
       ),
     };
   }
@@ -269,7 +299,11 @@ export class UsageTrackingService {
   /**
    * Get usage for a specific user
    */
-  async getUserUsage(userId: string, startDate?: Date, endDate?: Date): Promise<UsageAnalytics> {
+  async getUserUsage(
+    userId: string,
+    startDate?: Date,
+    endDate?: Date
+  ): Promise<UsageAnalytics> {
     const filters: UsageFilters = { userId };
     if (startDate) filters.startDate = startDate;
     if (endDate) filters.endDate = endDate;
@@ -285,10 +319,12 @@ export class UsageTrackingService {
     filters: UsageFilters = {}
   ): Promise<any[]> {
     const whereClause: any = {};
-    
-    if (filters.conversationId) whereClause.conversationId = filters.conversationId;
+
+    if (filters.conversationId)
+      whereClause.conversationId = filters.conversationId;
     if (filters.userId) whereClause.userId = filters.userId;
-    if (filters.operationType) whereClause.operationType = filters.operationType;
+    if (filters.operationType)
+      whereClause.operationType = filters.operationType;
     if (filters.model) whereClause.model = filters.model;
     if (filters.success !== undefined) whereClause.success = filters.success;
     if (filters.startDate || filters.endDate) {
@@ -299,7 +335,7 @@ export class UsageTrackingService {
 
     return this.prisma.usageTracking.findMany({
       where: whereClause,
-      orderBy: { createdAt: 'desc' },
+      orderBy: { createdAt: "desc" },
       take: limit,
       skip: offset,
       include: {
@@ -320,6 +356,8 @@ export class UsageTrackingService {
    * Helper method to format usage data for display
    */
   formatUsageForDisplay(usage: any): string {
-    return `${usage.operationType} (${usage.model}): ${CostService.formatTokens(usage.totalTokens)} - ${CostService.formatCost(usage.totalCost)}`;
+    return `${usage.operationType} (${usage.model}): ${CostService.formatTokens(
+      usage.totalTokens
+    )} - ${CostService.formatCost(usage.totalCost)}`;
   }
 }

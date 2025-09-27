@@ -42,11 +42,16 @@ export class ConversationSummaryService {
   private topicEmbeddingService: TopicEmbeddingService;
   private readonly TURN_THRESHOLD = 3; // 10 user messages = 10 turns
 
-  constructor(prisma: PrismaClient, openai: OpenAI, topicEmbeddingService?: TopicEmbeddingService) {
+  constructor(
+    prisma: PrismaClient,
+    openai: OpenAI,
+    topicEmbeddingService?: TopicEmbeddingService
+  ) {
     this.prisma = prisma;
     this.openai = openai;
     this.topicExtractionService = new TopicExtractionService(prisma);
-    this.topicEmbeddingService = topicEmbeddingService || new TopicEmbeddingService(openai, prisma);
+    this.topicEmbeddingService =
+      topicEmbeddingService || new TopicEmbeddingService(openai, prisma);
   }
 
   async checkAndCreateSummary(
@@ -217,23 +222,28 @@ export class ConversationSummaryService {
       dateRange: {
         startDate: userMessages[0]!.createdAt.toISOString(),
         endDate: new Date().toISOString(),
-        lastUserMessageDate: userMessages[userMessages.length - 1]!.createdAt.toISOString()
+        lastUserMessageDate:
+          userMessages[userMessages.length - 1]!.createdAt.toISOString(),
       },
-      messageRoles: allMessages.map(msg => msg.role),
-      lastMessage: allMessages.length > 0 ? {
-        id: allMessages[allMessages.length - 1]!.id,
-        role: allMessages[allMessages.length - 1]!.role,
-        createdAt: allMessages[allMessages.length - 1]!.createdAt.toISOString(),
-        content: allMessages[allMessages.length - 1]!.content // Show full content
-      } : null,
-      messageContentCheck: allMessages.map(msg => ({
+      messageRoles: allMessages.map((msg) => msg.role),
+      lastMessage:
+        allMessages.length > 0
+          ? {
+              id: allMessages[allMessages.length - 1]!.id,
+              role: allMessages[allMessages.length - 1]!.role,
+              createdAt:
+                allMessages[allMessages.length - 1]!.createdAt.toISOString(),
+              content: allMessages[allMessages.length - 1]!.content, // Show full content
+            }
+          : null,
+      messageContentCheck: allMessages.map((msg) => ({
         id: msg.id,
         role: msg.role,
         hasContent: !!msg.content,
         contentLength: msg.content?.length || 0,
         createdAt: msg.createdAt.toISOString(),
-        content: msg.content // Show full content
-      }))
+        content: msg.content, // Show full content
+      })),
     });
 
     // Extract granular topics from the conversation
@@ -249,13 +259,13 @@ export class ConversationSummaryService {
     console.log("🔍 [DEBUG] Topic extraction result:", {
       batchId: topicExtractionResult.batchId,
       topicsCount: topicExtractionResult.topics.length,
-      topics: topicExtractionResult.topics.map(topic => ({
+      topics: topicExtractionResult.topics.map((topic) => ({
         topicName: topic.topicName,
         hasRelatedTopics: Array.isArray(topic.relatedTopics),
         relatedTopicsCount: topic.relatedTopics?.length || 0,
         relatedTopics: topic.relatedTopics,
-        hasSummary: !!topic.summary
-      }))
+        hasSummary: !!topic.summary,
+      })),
     });
 
     // Create summaries for each topic
@@ -321,11 +331,13 @@ export class ConversationSummaryService {
       relatedTopicsValue: topic.relatedTopics,
       relatedTopicsType: typeof topic.relatedTopics,
       hasSummary: !!topic.summary,
-      relevanceScore: topic.relevanceScore
+      relevanceScore: topic.relevanceScore,
     });
 
     // Ensure relatedTopics is always an array
-    const safeRelatedTopics = Array.isArray(topic.relatedTopics) ? topic.relatedTopics : [];
+    const safeRelatedTopics = Array.isArray(topic.relatedTopics)
+      ? topic.relatedTopics
+      : [];
 
     return {
       id: `topic_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
@@ -385,14 +397,23 @@ export class ConversationSummaryService {
     });
 
     // Generate embeddings for all created summaries immediately after transaction
-    console.log(`🔄 [EMBEDDING] Generating embeddings for ${createdSummaries.length} summaries...`);
-    
+    console.log(
+      `🔄 [EMBEDDING] Generating embeddings for ${createdSummaries.length} summaries...`
+    );
+
     for (const createdSummary of createdSummaries) {
       try {
-        await this.topicEmbeddingService.updateSummaryEmbedding(createdSummary.id);
-        console.log(`✅ [EMBEDDING] Generated embedding for summary: ${createdSummary.id} (${createdSummary.topicName})`);
+        await this.topicEmbeddingService.updateSummaryEmbedding(
+          createdSummary.id
+        );
+        console.log(
+          `✅ [EMBEDDING] Generated embedding for summary: ${createdSummary.id} (${createdSummary.topicName})`
+        );
       } catch (error) {
-        console.error(`❌ [EMBEDDING] Failed to generate embedding for summary ${createdSummary.id}:`, error);
+        console.error(
+          `❌ [EMBEDDING] Failed to generate embedding for summary ${createdSummary.id}:`,
+          error
+        );
         // Don't throw here - we want to continue with other embeddings even if one fails
       }
     }

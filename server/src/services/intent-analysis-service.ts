@@ -6,7 +6,11 @@ import { UsageTrackingService } from "./usage-tracking-service";
 export interface IntentAnalysisResult {
   currentIntent: string;
   contextualRelevance: "high" | "medium" | "low";
-  relationshipToHistory: "continuation" | "new_topic" | "clarification" | "recall";
+  relationshipToHistory:
+    | "continuation"
+    | "new_topic"
+    | "clarification"
+    | "recall";
   keyTopics: string[];
   pendingQuestions: string[];
   lastAssistantQuestion?: string | undefined;
@@ -77,16 +81,22 @@ export class IntentAnalysisService {
   ): Promise<IntentAnalysisResult> {
     // Stage 1: Load minimal context and determine strategy
     const minimalContext = await this.loadMinimalContext(conversationId);
-    const initialAnalysis = await this.performIntentAnalysis(minimalContext, currentPrompt, conversationId, userMessageId, userId);
+    const initialAnalysis = await this.performIntentAnalysis(
+      minimalContext,
+      currentPrompt,
+      conversationId,
+      userMessageId,
+      userId
+    );
 
     // Stage 2: Load appropriate context based on strategy
     let finalContext: ConversationContext;
-    if (initialAnalysis.contextRetrievalStrategy === 'semantic_search') {
+    if (initialAnalysis.contextRetrievalStrategy === "semantic_search") {
       // TODO: Implement semantic search based context loading
       finalContext = await this.loadConversationContext(conversationId);
-    } else if (initialAnalysis.contextRetrievalStrategy === 'all_available') {
+    } else if (initialAnalysis.contextRetrievalStrategy === "all_available") {
       finalContext = await this.loadConversationContext(conversationId);
-    } else if (initialAnalysis.contextRetrievalStrategy === 'recent_only') {
+    } else if (initialAnalysis.contextRetrievalStrategy === "recent_only") {
       finalContext = minimalContext; // Use minimal context
     } else {
       finalContext = minimalContext; // 'none' strategy
@@ -95,13 +105,23 @@ export class IntentAnalysisService {
     // Stage 3: Perform final analysis with appropriate context (if different from initial)
     let finalAnalysis: IntentAnalysisResult;
     if (finalContext !== minimalContext) {
-      finalAnalysis = await this.performIntentAnalysis(finalContext, currentPrompt, conversationId, userMessageId, userId);
+      finalAnalysis = await this.performIntentAnalysis(
+        finalContext,
+        currentPrompt,
+        conversationId,
+        userMessageId,
+        userId
+      );
     } else {
       finalAnalysis = initialAnalysis;
     }
 
     // Store the analysis result
-    await this.storeIntentAnalysis(conversationId, userMessageId, finalAnalysis);
+    await this.storeIntentAnalysis(
+      conversationId,
+      userMessageId,
+      finalAnalysis
+    );
 
     return finalAnalysis;
   }
@@ -375,7 +395,12 @@ GUIDELINES:
                 },
                 relationshipToHistory: {
                   type: "string",
-                  enum: ["continuation", "new_topic", "clarification", "recall"],
+                  enum: [
+                    "continuation",
+                    "new_topic",
+                    "clarification",
+                    "recall",
+                  ],
                   description:
                     "How the current prompt relates to previous conversation",
                 },
@@ -421,11 +446,13 @@ GUIDELINES:
                 },
                 dateQuery: {
                   type: ["string", "null"],
-                  description: "Temporal reference for date-based search (e.g., 'yesterday', 'last 5 days', '2025-08-05')",
+                  description:
+                    "Temporal reference for date-based search (e.g., 'yesterday', 'last 5 days', '2025-08-05')",
                 },
                 includeHours: {
                   type: "boolean",
-                  description: "Whether hour-level granularity is needed for date filtering",
+                  description:
+                    "Whether hour-level granularity is needed for date filtering",
                 },
                 maxContextItems: {
                   type: "integer",
@@ -462,12 +489,12 @@ GUIDELINES:
 
       // With structured output, this is guaranteed to be valid JSON
       const analysis = JSON.parse(analysisText);
-      
+
       // Track usage for intent analysis
       const duration = Date.now() - startTime;
       const inputTokens = response.usage?.prompt_tokens || 0;
       const outputTokens = response.usage?.completion_tokens || 0;
-      
+
       const usageData: any = {
         conversationId,
         messageId: userMessageId,
@@ -482,14 +509,14 @@ GUIDELINES:
           contextRetrievalStrategy: analysis.contextRetrievalStrategy,
           needsHistoricalContext: analysis.needsHistoricalContext,
           keyTopicsCount: analysis.keyTopics?.length || 0,
-          confidenceLevel: "pending" // Will be calculated later
-        }
+          confidenceLevel: "pending", // Will be calculated later
+        },
       };
-      
+
       if (userId) {
         usageData.userId = userId;
       }
-      
+
       await this.usageTrackingService.trackUsage(usageData);
 
       // Debug logging for date-based queries
@@ -503,7 +530,11 @@ GUIDELINES:
       }
 
       // Calculate confidence based on analysis results
-      const confidence = this.calculateConfidence(analysis, currentPrompt, context);
+      const confidence = this.calculateConfidence(
+        analysis,
+        currentPrompt,
+        context
+      );
 
       return {
         currentIntent: analysis.currentIntent,
@@ -526,7 +557,7 @@ GUIDELINES:
       };
     } catch (error) {
       console.error("Intent analysis failed:", error);
-      
+
       // Track failed usage
       const duration = Date.now() - startTime;
       const usageData: any = {
@@ -541,14 +572,14 @@ GUIDELINES:
         success: false,
         metadata: {
           error: error instanceof Error ? error.message : "Unknown error",
-          fallbackUsed: true
-        }
+          fallbackUsed: true,
+        },
       };
-      
+
       if (userId) {
         usageData.userId = userId;
       }
-      
+
       await this.usageTrackingService.trackUsage(usageData);
 
       // Fallback analysis with low confidence
@@ -708,10 +739,16 @@ GUIDELINES:
     };
 
     // Calculate query specificity based on prompt characteristics
-    factors.querySpecificity = this.calculateQuerySpecificity(currentPrompt, analysis);
+    factors.querySpecificity = this.calculateQuerySpecificity(
+      currentPrompt,
+      analysis
+    );
 
     // Calculate context availability based on available context
-    factors.contextAvailability = this.calculateContextAvailability(context, analysis);
+    factors.contextAvailability = this.calculateContextAvailability(
+      context,
+      analysis
+    );
 
     // For recall queries, we'll update search result quality later when we have search results
     if (analysis.relationshipToHistory === "recall") {
@@ -728,7 +765,7 @@ GUIDELINES:
       historicalMatch: 0.2,
     };
 
-    const score = 
+    const score =
       factors.searchResultQuality * weights.searchResultQuality +
       factors.contextAvailability * weights.contextAvailability +
       factors.querySpecificity * weights.querySpecificity +
@@ -760,7 +797,7 @@ GUIDELINES:
       "we talked about",
     ];
 
-    const hasRecallIndicators = recallIndicators.some(indicator =>
+    const hasRecallIndicators = recallIndicators.some((indicator) =>
       prompt.toLowerCase().includes(indicator)
     );
 
@@ -775,7 +812,7 @@ GUIDELINES:
 
     // Check for question words that indicate specific information seeking
     const questionWords = ["what", "when", "where", "who", "how", "which"];
-    const hasQuestionWords = questionWords.some(word =>
+    const hasQuestionWords = questionWords.some((word) =>
       prompt.toLowerCase().includes(word)
     );
 
@@ -786,7 +823,10 @@ GUIDELINES:
     return Math.min(specificity, 1.0);
   }
 
-  private calculateContextAvailability(context: ConversationContext, analysis: any): number {
+  private calculateContextAvailability(
+    context: ConversationContext,
+    analysis: any
+  ): number {
     let availability = 0.3; // Base score
 
     // Check message history availability
@@ -814,10 +854,11 @@ GUIDELINES:
     }
 
     const { confidence } = smartContextResult;
-    
+
     // Update search result quality with actual data
-    intentAnalysis.confidenceFactors.searchResultQuality = confidence.searchResultQuality;
-    
+    intentAnalysis.confidenceFactors.searchResultQuality =
+      confidence.searchResultQuality;
+
     // Update historical match based on search results
     if (confidence.hasStrongMatches) {
       intentAnalysis.confidenceFactors.historicalMatch = Math.max(
@@ -825,7 +866,8 @@ GUIDELINES:
         0.7
       );
     } else if (confidence.resultCount > 0) {
-      intentAnalysis.confidenceFactors.historicalMatch = confidence.averageSimilarity;
+      intentAnalysis.confidenceFactors.historicalMatch =
+        confidence.averageSimilarity;
     } else {
       intentAnalysis.confidenceFactors.historicalMatch = 0.1; // Very low if no results
     }
@@ -839,7 +881,7 @@ GUIDELINES:
       historicalMatch: 0.15,
     };
 
-    intentAnalysis.confidenceScore = 
+    intentAnalysis.confidenceScore =
       (factors.searchResultQuality || 0) * weights.searchResultQuality +
       (factors.contextAvailability || 0) * weights.contextAvailability +
       (factors.querySpecificity || 0) * weights.querySpecificity +

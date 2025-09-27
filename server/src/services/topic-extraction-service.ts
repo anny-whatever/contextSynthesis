@@ -1,6 +1,6 @@
-import { OpenAI } from 'openai';
-import { Message, PrismaClient, UsageOperationType } from '@prisma/client';
-import { UsageTrackingService } from './usage-tracking-service';
+import { OpenAI } from "openai";
+import { Message, PrismaClient, UsageOperationType } from "@prisma/client";
+import { UsageTrackingService } from "./usage-tracking-service";
 
 export interface ExtractedTopic {
   topicName: string;
@@ -30,17 +30,19 @@ export class TopicExtractionService {
   }
 
   async extractGranularTopics(
-    messages: Message[], 
-    conversationId?: string, 
-    userMessageId?: string, 
+    messages: Message[],
+    conversationId?: string,
+    userMessageId?: string,
     userId?: string
   ): Promise<TopicExtractionResult> {
-    const batchId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    
+    const batchId = `batch_${Date.now()}_${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+
     // Prepare conversation text for analysis
     const conversationText = messages
-      .map(msg => `${msg.role}: ${msg.content}`)
-      .join('\n\n');
+      .map((msg) => `${msg.role}: ${msg.content}`)
+      .join("\n\n");
 
     const systemPrompt = `You are an expert conversation analyst. Your task is to extract granular, focused topics from conversations and create comprehensive, detailed summaries.
 
@@ -90,22 +92,22 @@ CRITICAL: For each topic's summary, you MUST include ALL specific details mentio
 Do NOT create brief summaries. Create comprehensive, detailed summaries that preserve all the important information discussed for each topic.`;
 
     const startTime = Date.now();
-    
+
     try {
       const response = await this.openai.chat.completions.create({
-        model: 'gpt-4o',
+        model: "gpt-4o",
         messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
         ],
-        response_format: { type: 'json_object' },
+        response_format: { type: "json_object" },
         temperature: 0.3,
         max_tokens: 4000,
       });
 
       const content = response.choices[0]?.message?.content;
       if (!content) {
-        throw new Error('No content received from OpenAI');
+        throw new Error("No content received from OpenAI");
       }
       const result = JSON.parse(content);
 
@@ -116,7 +118,7 @@ Do NOT create brief summaries. Create comprehensive, detailed summaries that pre
           conversationId,
           messageId: userMessageId,
           operationType: UsageOperationType.TOPIC_EXTRACTION,
-          model: 'gpt-4o',
+          model: "gpt-4o",
           duration,
           success: true,
           inputTokens: response.usage?.prompt_tokens || 0,
@@ -125,32 +127,35 @@ Do NOT create brief summaries. Create comprehensive, detailed summaries that pre
             messageCount: messages.length,
             topicsExtracted: result.topics?.length || 0,
             batchId,
-            totalTokens: response.usage?.total_tokens
+            totalTokens: response.usage?.total_tokens,
           },
-          ...(userId && { userId })
+          ...(userId && { userId }),
         });
       }
-      
+
       // Validate and clean the result
       const topics: ExtractedTopic[] = (result.topics || [])
         .filter((topic: any) => topic.topicName && topic.summary)
         .map((topic: any) => ({
           topicName: topic.topicName,
           relevanceScore: Math.max(0, Math.min(1, topic.relevanceScore || 0.5)),
-          relatedTopics: Array.isArray(topic.relatedTopics) ? topic.relatedTopics : [],
-          keyMessages: Array.isArray(topic.keyMessages) ? topic.keyMessages.slice(0, 3) : [],
-          summary: topic.summary
+          relatedTopics: Array.isArray(topic.relatedTopics)
+            ? topic.relatedTopics
+            : [],
+          keyMessages: Array.isArray(topic.keyMessages)
+            ? topic.keyMessages.slice(0, 3)
+            : [],
+          summary: topic.summary,
         }));
 
       return {
         topics,
         batchId,
-        totalMessages: messages.length
+        totalMessages: messages.length,
       };
-
     } catch (error) {
-      console.error('Error extracting topics:', error);
-      
+      console.error("Error extracting topics:", error);
+
       // Track usage for failed topic extraction
       if (this.usageTrackingService && conversationId && userMessageId) {
         const duration = Date.now() - startTime;
@@ -158,32 +163,34 @@ Do NOT create brief summaries. Create comprehensive, detailed summaries that pre
           conversationId,
           messageId: userMessageId,
           operationType: UsageOperationType.TOPIC_EXTRACTION,
-          model: 'gpt-4o',
+          model: "gpt-4o",
           duration,
           success: false,
           inputTokens: 0,
           outputTokens: 0,
           metadata: {
             messageCount: messages.length,
-            error: error instanceof Error ? error.message : 'Unknown error',
-            batchId
+            error: error instanceof Error ? error.message : "Unknown error",
+            batchId,
           },
-          ...(userId && { userId })
+          ...(userId && { userId }),
         });
       }
-      
+
       // Fallback: create a single generic topic with detailed summary
       const fallbackSummary = this.createDetailedFallbackSummary(messages);
       return {
-        topics: [{
-          topicName: 'General Discussion',
-          relevanceScore: 1.0,
-          relatedTopics: [],
-          keyMessages: [],
-          summary: fallbackSummary
-        }],
+        topics: [
+          {
+            topicName: "General Discussion",
+            relevanceScore: 1.0,
+            relatedTopics: [],
+            keyMessages: [],
+            summary: fallbackSummary,
+          },
+        ],
         batchId,
-        totalMessages: messages.length
+        totalMessages: messages.length,
       };
     }
   }
@@ -193,18 +200,18 @@ Do NOT create brief summaries. Create comprehensive, detailed summaries that pre
    */
   private validateTopicGranularity(topics: ExtractedTopic[]): boolean {
     const genericTopics = [
-      'general discussion',
-      'conversation',
-      'chat',
-      'discussion',
-      'general',
-      'misc',
-      'other'
+      "general discussion",
+      "conversation",
+      "chat",
+      "discussion",
+      "general",
+      "misc",
+      "other",
     ];
 
     // Check if we have too many generic topics
-    const genericCount = topics.filter(topic => 
-      genericTopics.some(generic => 
+    const genericCount = topics.filter((topic) =>
+      genericTopics.some((generic) =>
         topic.topicName.toLowerCase().includes(generic)
       )
     ).length;
@@ -225,7 +232,7 @@ Do NOT create brief summaries. Create comprehensive, detailed summaries that pre
 
       const currentTopic = topics[i];
       if (!currentTopic) continue;
-      
+
       const similarTopics: ExtractedTopic[] = [currentTopic];
 
       for (let j = i + 1; j < topics.length; j++) {
@@ -233,8 +240,10 @@ Do NOT create brief summaries. Create comprehensive, detailed summaries that pre
 
         const otherTopic = topics[j];
         if (!otherTopic) continue;
-        
-        if (this.areTopicsSimilar(currentTopic.topicName, otherTopic.topicName)) {
+
+        if (
+          this.areTopicsSimilar(currentTopic.topicName, otherTopic.topicName)
+        ) {
           similarTopics.push(otherTopic);
           processed.add(j);
         }
@@ -244,10 +253,18 @@ Do NOT create brief summaries. Create comprehensive, detailed summaries that pre
       if (similarTopics.length > 1) {
         const mergedTopic: ExtractedTopic = {
           topicName: currentTopic.topicName, // Keep the first topic name
-          relevanceScore: Math.max(...similarTopics.map(t => t.relevanceScore)),
-          relatedTopics: [...new Set(similarTopics.flatMap(t => t.relatedTopics))],
-          keyMessages: [...new Set(similarTopics.flatMap(t => t.keyMessages))].slice(0, 3),
-          summary: this.mergeDetailedSummaries(similarTopics.map(t => t.summary))
+          relevanceScore: Math.max(
+            ...similarTopics.map((t) => t.relevanceScore)
+          ),
+          relatedTopics: [
+            ...new Set(similarTopics.flatMap((t) => t.relatedTopics)),
+          ],
+          keyMessages: [
+            ...new Set(similarTopics.flatMap((t) => t.keyMessages)),
+          ].slice(0, 3),
+          summary: this.mergeDetailedSummaries(
+            similarTopics.map((t) => t.summary)
+          ),
         };
         merged.push(mergedTopic);
       } else {
@@ -263,91 +280,158 @@ Do NOT create brief summaries. Create comprehensive, detailed summaries that pre
   private areTopicsSimilar(topic1: string, topic2: string): boolean {
     const words1 = topic1.toLowerCase().split(/\s+/);
     const words2 = topic2.toLowerCase().split(/\s+/);
-    
+
     // Check for common words (simple similarity)
-    const commonWords = words1.filter(word => words2.includes(word));
+    const commonWords = words1.filter((word) => words2.includes(word));
     return commonWords.length >= Math.min(words1.length, words2.length) * 0.5;
   }
 
   private mergeDetailedSummaries(summaries: string[]): string {
-    if (summaries.length === 1) return summaries[0] || '';
-    
+    if (summaries.length === 1) return summaries[0] || "";
+
     // Extract unique information from all summaries
-    const allText = summaries.join(' ');
-    
+    const allText = summaries.join(" ");
+
     // Extract dates, numbers, names, and other details
-    const dateMatches = [...new Set(allText.match(/\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b|\b\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}\b|\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b|\b\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/gi) || [])];
-    const numberMatches = [...new Set(allText.match(/\b\d+(?:\.\d+)?(?:%|\$|€|£|USD|EUR|GBP)?\b/g) || [])];
-    
+    const dateMatches = [
+      ...new Set(
+        allText.match(
+          /\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b|\b\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}\b|\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b|\b\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/gi
+        ) || []
+      ),
+    ];
+    const numberMatches = [
+      ...new Set(
+        allText.match(/\b\d+(?:\.\d+)?(?:%|\$|€|£|USD|EUR|GBP)?\b/g) || []
+      ),
+    ];
+
     // Combine summaries while removing redundancy
-    const sentences = summaries.flatMap(summary => 
-      summary.split(/[.!?]+/).filter(s => s.trim().length > 10)
+    const sentences = summaries.flatMap((summary) =>
+      summary.split(/[.!?]+/).filter((s) => s.trim().length > 10)
     );
-    
+
     // Remove duplicate sentences (simple check)
     const uniqueSentences = sentences.filter((sentence, index) => {
       const trimmed = sentence.trim().toLowerCase();
-      return sentences.findIndex(s => s.trim().toLowerCase() === trimmed) === index;
+      return (
+        sentences.findIndex((s) => s.trim().toLowerCase() === trimmed) === index
+      );
     });
-    
-    let mergedSummary = uniqueSentences.join('. ').trim();
-    if (!mergedSummary.endsWith('.')) mergedSummary += '.';
-    
+
+    let mergedSummary = uniqueSentences.join(". ").trim();
+    if (!mergedSummary.endsWith(".")) mergedSummary += ".";
+
     // Ensure important details are preserved
     if (dateMatches.length > 0) {
-      mergedSummary += ` Key dates: ${dateMatches.slice(0, 5).join(', ')}.`;
+      mergedSummary += ` Key dates: ${dateMatches.slice(0, 5).join(", ")}.`;
     }
     if (numberMatches.length > 0) {
-      mergedSummary += ` Important figures: ${numberMatches.slice(0, 8).join(', ')}.`;
+      mergedSummary += ` Important figures: ${numberMatches
+        .slice(0, 8)
+        .join(", ")}.`;
     }
-    
+
     return mergedSummary;
   }
 
   private createDetailedFallbackSummary(messages: Message[]): string {
     // Extract key information from messages for fallback summary
-    const userMessages = messages.filter(msg => msg.role === 'USER');
-    const assistantMessages = messages.filter(msg => msg.role === 'ASSISTANT');
-    
+    const userMessages = messages.filter((msg) => msg.role === "USER");
+    const assistantMessages = messages.filter(
+      (msg) => msg.role === "ASSISTANT"
+    );
+
     // Extract dates, numbers, and names using simple regex patterns
-    const allContent = messages.map(msg => msg.content).join(' ');
-    
+    const allContent = messages.map((msg) => msg.content).join(" ");
+
     // Extract dates (various formats)
-    const dateMatches = allContent.match(/\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b|\b\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}\b|\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b|\b\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/gi) || [];
-    
+    const dateMatches =
+      allContent.match(
+        /\b\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4}\b|\b\d{4}[\/\-\.]\d{1,2}[\/\-\.]\d{1,2}\b|\b(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},?\s+\d{4}\b|\b\d{1,2}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{4}\b/gi
+      ) || [];
+
     // Extract numbers and statistics
-    const numberMatches = allContent.match(/\b\d+(?:\.\d+)?(?:%|\$|€|£|USD|EUR|GBP)?\b/g) || [];
-    
+    const numberMatches =
+      allContent.match(/\b\d+(?:\.\d+)?(?:%|\$|€|£|USD|EUR|GBP)?\b/g) || [];
+
     // Extract potential names (capitalized words that aren't common words)
-    const commonWords = new Set(['The', 'This', 'That', 'And', 'Or', 'But', 'For', 'With', 'By', 'From', 'To', 'In', 'On', 'At', 'As', 'Is', 'Are', 'Was', 'Were', 'Be', 'Been', 'Being', 'Have', 'Has', 'Had', 'Do', 'Does', 'Did', 'Will', 'Would', 'Could', 'Should', 'May', 'Might', 'Can', 'Must']);
-    const nameMatches = allContent.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g)?.filter(match => !commonWords.has(match)) || [];
-    
+    const commonWords = new Set([
+      "The",
+      "This",
+      "That",
+      "And",
+      "Or",
+      "But",
+      "For",
+      "With",
+      "By",
+      "From",
+      "To",
+      "In",
+      "On",
+      "At",
+      "As",
+      "Is",
+      "Are",
+      "Was",
+      "Were",
+      "Be",
+      "Been",
+      "Being",
+      "Have",
+      "Has",
+      "Had",
+      "Do",
+      "Does",
+      "Did",
+      "Will",
+      "Would",
+      "Could",
+      "Should",
+      "May",
+      "Might",
+      "Can",
+      "Must",
+    ]);
+    const nameMatches =
+      allContent
+        .match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b/g)
+        ?.filter((match) => !commonWords.has(match)) || [];
+
     let summary = `Conversation involving ${userMessages.length} user messages and ${assistantMessages.length} assistant responses. `;
-    
+
     if (dateMatches.length > 0) {
-      summary += `Key dates mentioned: ${[...new Set(dateMatches)].slice(0, 5).join(', ')}. `;
+      summary += `Key dates mentioned: ${[...new Set(dateMatches)]
+        .slice(0, 5)
+        .join(", ")}. `;
     }
-    
+
     if (nameMatches.length > 0) {
-      summary += `Persons/entities referenced: ${[...new Set(nameMatches)].slice(0, 10).join(', ')}. `;
+      summary += `Persons/entities referenced: ${[...new Set(nameMatches)]
+        .slice(0, 10)
+        .join(", ")}. `;
     }
-    
+
     if (numberMatches.length > 0) {
-      summary += `Important numbers/statistics: ${[...new Set(numberMatches)].slice(0, 10).join(', ')}. `;
+      summary += `Important numbers/statistics: ${[...new Set(numberMatches)]
+        .slice(0, 10)
+        .join(", ")}. `;
     }
-    
+
     // Add message content summary
-    const firstUserMessage = userMessages[0]?.content || '';
-    const lastUserMessage = userMessages[userMessages.length - 1]?.content || '';
-    
+    const firstUserMessage = userMessages[0]?.content || "";
+    const lastUserMessage =
+      userMessages[userMessages.length - 1]?.content || "";
+
     if (firstUserMessage) {
       summary += `Initial topic: ${firstUserMessage}. `;
     }
-    
+
     if (lastUserMessage && lastUserMessage !== firstUserMessage) {
       summary += `Recent topic: ${lastUserMessage}. `;
     }
-    
+
     return summary.trim();
   }
 }
