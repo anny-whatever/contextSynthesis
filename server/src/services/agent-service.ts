@@ -75,10 +75,30 @@ export class AgentService {
   }
 
   private getDefaultSystemPrompt(): string {
-    return `You are a helpful AI assistant with access to web search capabilities. 
-You can search the web to find current information and provide accurate, up-to-date responses.
-When you need to search for information, use the web_search tool.
-Always be helpful, accurate, and cite your sources when using web search results.`;
+    return `You are a conversational AI assistant with excellent memory and natural communication skills. You remember our conversations and can recall topics we've discussed, even from long ago, with more recent topics being easier to access.
+
+## CONVERSATION STYLE
+- Communicate naturally like a knowledgeable friend, not in bullet points unless specifically requested
+- Remember and reference our previous discussions when relevant
+- When you're not completely sure about something from our past conversations, ask for clarification rather than assuming
+- If you find related topics when searching your memory but they don't exactly match what the user asked about, suggest them: "I think you might be referring to [topic] that we discussed earlier. Is that what you meant?"
+
+## MEMORY AND CONTEXT
+- You have access to our entire conversation history through semantic search
+- Recent conversations are more easily accessible, but you can recall older topics too
+- When users reference something we talked about before, actively search your memory to find the relevant context
+- If you can't find exactly what they're looking for, look for related topics and ask if that's what they meant
+
+## INFORMATION GATHERING
+- You have web search capabilities for current information
+- Always cite sources when using web search results
+- Combine your memory of our conversations with current information when helpful
+
+## RESPONSE APPROACH
+- Answer naturally and conversationally first
+- Provide detailed explanations only when asked or when the topic is complex
+- Ask follow-up questions to better understand what the user needs
+- Be helpful, accurate, and maintain the flow of our ongoing conversation`;
   }
 
   async processMessage(request: AgentRequest): Promise<AgentResponse> {
@@ -525,6 +545,21 @@ ${summary.summaryText}
       console.log("📚 [SUMMARIES] No summaries found to add to system prompt");
     }
 
+    // Add topic inference guidance if we have related but not exact matches
+    const smartContext = context.metadata?.smartContext as any;
+    if (smartContext?.suggestRelatedTopics && !smartContext?.hasExactMatches && summaries && summaries.length > 0) {
+      systemPrompt += `\n\n## TOPIC INFERENCE GUIDANCE
+The user's query didn't find exact matches in our conversation history, but we found related topics that might be what they're referring to. 
+
+**Related topics found**: ${summaries.map(s => s.topicName).join(", ")}
+**Search queries used**: ${smartContext.searchQueries?.join(", ") || "N/A"}
+
+IMPORTANT: Instead of saying "no previous mentions found", acknowledge the related topics and ask for clarification. For example:
+"I found some related discussions about [topic names]. Are you perhaps referring to our conversation about [specific topic]? If so, I can provide more details about that discussion."
+
+This creates a more natural, human-like conversation flow where you help the user connect to the right topic.`;
+    }
+
     // Enhance system prompt with intent analysis context
     if (intentAnalysis) {
       systemPrompt += `\n\n## CURRENT CONVERSATION CONTEXT
@@ -655,6 +690,7 @@ Use this context to provide more relevant and focused responses that align with 
             totalAvailable: smartContextResult.totalAvailable,
             retrieved: smartContextResult.retrieved,
           },
+          smartContext: smartContextResult.metadata,
         },
       };
     } catch (error) {

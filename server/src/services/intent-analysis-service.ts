@@ -263,7 +263,15 @@ CONTEXT RETRIEVAL GUIDELINES:
   * "semantic_search": For queries about SPECIFIC TOPICS mentioned in the past, especially when user says "we talked about", "we discussed", "tell me about [specific thing]", or references specific subjects/items/concepts from history
   * "all_available": For complex queries needing comprehensive context across entire conversation
 - semanticSearchQueries: Generate 1-3 specific search terms if using semantic_search strategy, empty array otherwise
-- maxContextItems: Suggest 3-5 for simple queries, 5-8 for complex ones, up to 10 for comprehensive analysis
+- maxContextItems: 
+  * For BASIC/CASUAL queries (simple questions, general topics): 3 items max
+  * For DETAILED/SPECIFIC queries (asking for "detailed", "comprehensive", "all", "everything", "in-depth"): 5-8 items
+  * For COMPREHENSIVE analysis: up to 10 items
+
+QUERY CLASSIFICATION FOR CONTEXT RETRIEVAL:
+- BASIC queries: Simple questions, casual references, general topics - limit to TOP 3 most recent/relevant results
+- DETAILED queries: When user asks for "detailed", "comprehensive", "all information", "everything about", "in-depth", "complete" information - provide more comprehensive results
+- EXACT MATCH queries: When user references specific topics with exact phrases from past conversations
 
 CRITICAL SEMANTIC SEARCH RULE:
 If the user's query references SPECIFIC TOPICS, ITEMS, or CONCEPTS from past conversation (using phrases like "we talked about", "we discussed", "what were the", "tell me about [X]", "what did we say about"), you MUST use "semantic_search" strategy REGARDLESS of whether those topics appear in the current context. The semantic search will find the most relevant historical information about those specific topics.
@@ -274,6 +282,11 @@ IMPORTANT: Use "semantic_search" when the user:
 - Asks about specific technical details, products, or subjects mentioned before
 - Wants information about something specific that was covered in previous exchanges
 - Even if some information about the topic exists in current context, use semantic_search to get comprehensive topic-specific information
+
+CONTEXT AMOUNT GUIDELINES:
+- If user asks casually about a topic without requesting details: maxContextItems = 3
+- If user asks for detailed/comprehensive/complete information: maxContextItems = 5-8
+- If user asks for "everything" or "all information": maxContextItems = 10
 
 GUIDELINES:
 - Focus on actionable intent, not just topic identification

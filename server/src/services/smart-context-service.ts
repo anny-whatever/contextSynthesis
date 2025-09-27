@@ -10,10 +10,17 @@ export interface SmartContextResult {
     messageRange: any;
     summaryLevel: number;
     topicRelevance: number;
+    createdAt?: string;
+    isExactMatch?: boolean;
   }>;
   retrievalMethod: string;
   totalAvailable: number;
   retrieved: number;
+  metadata?: {
+    hasExactMatches?: boolean;
+    searchQueries?: string[];
+    suggestRelatedTopics?: boolean;
+  };
 }
 
 export class SmartContextService {
@@ -146,16 +153,30 @@ export class SmartContextService {
 
     const allResults = new Set<string>();
     const summaryMap = new Map<string, any>();
+    let hasExactMatches = false;
 
-    // Perform semantic search for each query
+    // Perform semantic search for each query with different thresholds
     for (const query of searchQueries) {
       try {
-        const searchResults = await this.semanticSearchTool.execute({
+        // First try with higher threshold for exact matches
+        let searchResults = await this.semanticSearchTool.execute({
           query,
           conversationId,
           limit: Math.ceil(limit / searchQueries.length),
-          threshold: 0.3,
+          threshold: 0.7, // Higher threshold for exact matches
         });
+
+        // If no exact matches found, try with lower threshold for related topics
+        if (!searchResults.success || !searchResults.data || searchResults.data.results.length === 0) {
+          searchResults = await this.semanticSearchTool.execute({
+            query,
+            conversationId,
+            limit: Math.ceil(limit / searchQueries.length),
+            threshold: 0.3, // Lower threshold for related topics
+          });
+        } else {
+          hasExactMatches = true;
+        }
 
         if (searchResults.success && searchResults.data) {
           for (const result of searchResults.data.results) {
@@ -167,7 +188,9 @@ export class SmartContextService {
                 relatedTopics: result.relatedTopics,
                 messageRange: result.messageRange,
                 summaryLevel: result.summaryLevel,
-                topicRelevance: result.similarity,
+                topicRelevance: result.similarity_score || result.similarity,
+                createdAt: result.createdAt,
+                isExactMatch: result.similarity_score >= 0.3, // Mark if it's a close match
               });
             }
           }
@@ -177,9 +200,22 @@ export class SmartContextService {
       }
     }
 
-    // Convert to array and sort by relevance
+    // Convert to array and sort by time first (recent first), then by relevance
     const summaries = Array.from(summaryMap.values())
-      .sort((a, b) => b.topicRelevance - a.topicRelevance)
+      .sort((a, b) => {
+        // First sort by creation time (recent first)
+        const timeA = new Date(a.createdAt).getTime();
+        const timeB = new Date(b.createdAt).getTime();
+        const timeDiff = timeB - timeA;
+        
+        // If time difference is significant (more than 1 hour), prioritize by time
+        if (Math.abs(timeDiff) > 3600000) {
+          return timeDiff;
+        }
+        
+        // Otherwise, sort by relevance
+        return b.topicRelevance - a.topicRelevance;
+      })
       .slice(0, limit);
 
     const totalCount = await this.getTotalSummariesCount(conversationId);
@@ -189,6 +225,11 @@ export class SmartContextService {
       retrievalMethod: "semantic_search",
       totalAvailable: totalCount,
       retrieved: summaries.length,
+      metadata: {
+        hasExactMatches,
+        searchQueries,
+        suggestRelatedTopics: !hasExactMatches && summaries.length > 0
+      }
     };
   }
 
