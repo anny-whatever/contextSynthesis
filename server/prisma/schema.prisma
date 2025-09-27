@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,13 +8,11 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String?  @unique
-  name      String?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
+  id            String          @id @default(cuid())
+  email         String?         @unique
+  name          String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
   conversations Conversation[]
   usageTracking UsageTracking[]
 
@@ -25,44 +20,40 @@ model User {
 }
 
 model Conversation {
-  id        String   @id @default(cuid())
-  title     String?
-  userId    String?
-  totalInputTokens  Int      @default(0)
-  totalOutputTokens Int      @default(0)
-  totalCost         Float    @default(0.0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  user               User?                  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  messages           Message[]
-  summaries          ConversationSummary[]
-  intentAnalyses     IntentAnalysis[]
-  usageTracking      UsageTracking[]
+  id                String                @id @default(cuid())
+  title             String?
+  userId            String?
+  totalInputTokens  Int                   @default(0)
+  totalOutputTokens Int                   @default(0)
+  totalCost         Float                 @default(0.0)
+  createdAt         DateTime              @default(now())
+  updatedAt         DateTime              @updatedAt
+  summaries         ConversationSummary[]
+  user              User?                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  intentAnalyses    IntentAnalysis[]
+  messages          Message[]
+  usageTracking     UsageTracking[]
 
   @@map("conversations")
 }
 
 model Message {
-  id             String   @id @default(cuid())
+  id             String               @id @default(cuid())
   conversationId String
   role           Role
   content        String
-  inputTokens    Int?     // Tokens used for input (for ASSISTANT messages)
-  outputTokens   Int?     // Tokens used for output (for ASSISTANT messages)
-  cost           Float?   // Cost for this specific message
-  metadata       Json?    // Store additional metadata like tool calls, citations, etc.
-  summaryId      String?  // Reference to the summary this message belongs to
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  // Relations
-  conversation    Conversation         @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  summary         ConversationSummary? @relation(fields: [summaryId], references: [id], onDelete: SetNull)
-  toolUsages      ToolUsage[]
-  intentAnalyses  IntentAnalysis[]
-  usageTracking   UsageTracking[]
+  inputTokens    Int?
+  outputTokens   Int?
+  cost           Float?
+  metadata       Json?
+  summaryId      String?
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  intentAnalyses IntentAnalysis[]
+  conversation   Conversation         @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  summary        ConversationSummary? @relation(fields: [summaryId], references: [id])
+  toolUsages     ToolUsage[]
+  usageTracking  UsageTracking[]
 
   @@index([conversationId, summaryId])
   @@index([summaryId])
@@ -70,40 +61,36 @@ model Message {
 }
 
 model ToolUsage {
-  id        String   @id @default(cuid())
+  id        String     @id @default(cuid())
   messageId String
   toolName  String
-  input     Json     // Store tool input parameters
-  output    Json?    // Store tool output/results
+  input     Json
+  output    Json?
   status    ToolStatus @default(PENDING)
-  error     String?  // Store error message if tool execution failed
-  duration  Int?     // Execution time in milliseconds
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  // Relations
-  message Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  error     String?
+  duration  Int?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+  message   Message    @relation(fields: [messageId], references: [id], onDelete: Cascade)
 
   @@map("tool_usages")
 }
 
 model ConversationSummary {
-  id             String   @id @default(cuid())
+  id             String                 @id @default(cuid())
   conversationId String
-  topicName      String   // Specific granular topic name
-  summaryText    String   // Summary focused on this specific topic
-  relatedTopics  Json?    // Array of related/connected topics
-  messageRange   Json     // {startMessageId, endMessageId, messageCount}
-  summaryLevel   Int      @default(1) // 1 = first summary, 2 = summary of summaries, etc.
-  topicRelevance Float    @default(1.0) // Relevance score for this topic (0.0 - 1.0)
-  batchId        String?  // Groups topics created in the same summarization batch
-  topicEmbedding Unsupported("vector(384)")? // Vector embedding for semantic search
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-
-  // Relations
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  messages     Message[]    // Messages that belong to this summary
+  topicName      String
+  summaryText    String
+  relatedTopics  Json?
+  messageRange   Json
+  summaryLevel   Int                    @default(1)
+  topicRelevance Float                  @default(1.0)
+  batchId        String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  topicEmbedding Unsupported("vector")?
+  conversation   Conversation           @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  messages       Message[]
 
   @@index([conversationId, batchId])
   @@index([topicName])
@@ -111,78 +98,60 @@ model ConversationSummary {
 }
 
 model IntentAnalysis {
-  id                    String   @id @default(cuid())
+  id                    String       @id @default(cuid())
   conversationId        String
   userMessageId         String
-  currentIntent         String   // What the user is trying to achieve
-  contextualRelevance   String   // 'high', 'medium', 'low'
-  relationshipToHistory String   // 'continuation', 'new_topic', 'clarification'
-  keyTopics             Json     // Array of topics relevant to current intent
-  pendingQuestions      Json     // Array of questions that need follow-up
-  lastAssistantQuestion String?  // Last question asked by assistant
-  analysisResult        Json     // Full analysis result for debugging
-  createdAt             DateTime @default(now())
-
-  // Relations
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  userMessage  Message      @relation(fields: [userMessageId], references: [id], onDelete: Cascade)
+  currentIntent         String
+  contextualRelevance   String
+  relationshipToHistory String
+  keyTopics             Json
+  pendingQuestions      Json
+  lastAssistantQuestion String?
+  analysisResult        Json
+  createdAt             DateTime     @default(now())
+  conversation          Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userMessage           Message      @relation(fields: [userMessageId], references: [id], onDelete: Cascade)
 
   @@map("intent_analyses")
 }
 
 model AgentSession {
-  id          String   @id @default(cuid())
-  sessionId   String   @unique
-  agentName   String
+  id           String   @id @default(cuid())
+  sessionId    String   @unique
+  agentName    String
   instructions String?
-  context     Json?    // Store agent context and state
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  context      Json?
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   @@map("agent_sessions")
 }
 
 model UsageTracking {
-  id                String   @id @default(cuid())
-  
-  // Core identifiers
-  conversationId    String?
-  messageId         String?
-  userId            String?
-  
-  // Operation details
-  operationType     UsageOperationType  // AGENT_COMPLETION, INTENT_ANALYSIS, SUMMARIZATION, TOOL_CALL, etc.
-  operationSubtype  String?            // e.g., "initial_completion", "tool_followup", "topic_extraction"
-  model             String             // e.g., "gpt-4o-mini"
-  
-  // Token usage
-  inputTokens       Int      @default(0)
-  outputTokens      Int      @default(0)
-  totalTokens       Int      @default(0)
-  
-  // Cost breakdown
-  inputCost         Float    @default(0.0)
-  outputCost        Float    @default(0.0)
-  totalCost         Float    @default(0.0)
-  
-  // Performance metrics
-  duration          Int?     // milliseconds
-  success           Boolean  @default(true)
-  errorMessage      String?
-  
-  // Context and metadata
-  metadata          Json?    // Store operation-specific data
-  batchId           String?  // Group related operations
-  
-  // Timestamps
-  createdAt         DateTime @default(now())
-  
-  // Relations
-  conversation      Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  message           Message?      @relation(fields: [messageId], references: [id], onDelete: Cascade)
-  user              User?         @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+  id               String             @id @default(cuid())
+  conversationId   String?
+  messageId        String?
+  userId           String?
+  operationType    UsageOperationType
+  operationSubtype String?
+  model            String
+  inputTokens      Int                @default(0)
+  outputTokens     Int                @default(0)
+  totalTokens      Int                @default(0)
+  inputCost        Float              @default(0.0)
+  outputCost       Float              @default(0.0)
+  totalCost        Float              @default(0.0)
+  duration         Int?
+  success          Boolean            @default(true)
+  errorMessage     String?
+  metadata         Json?
+  batchId          String?
+  createdAt        DateTime           @default(now())
+  conversation     Conversation?      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  message          Message?           @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user             User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@index([conversationId, operationType])
   @@index([userId, createdAt])
   @@index([operationType, createdAt])
@@ -205,7 +174,7 @@ enum ToolStatus {
 
 enum UsageOperationType {
   AGENT_COMPLETION
-  INTENT_ANALYSIS  
+  INTENT_ANALYSIS
   SUMMARIZATION
   TOPIC_EXTRACTION
   TOOL_CALL

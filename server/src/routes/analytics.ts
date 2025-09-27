@@ -229,19 +229,67 @@ router.get(
         startDate.setDate(now.getDate() - 7);
     }
 
-    // Get usage timeline data
-    const timelineData = await prisma.$queryRaw`
-      SELECT 
-        DATE_FORMAT(createdAt, ${dateFormat}) as date,
-        COUNT(*) as usageCount,
-        SUM(totalCost) as totalCost,
-        SUM(inputTokens + outputTokens) as totalTokens,
-        AVG(duration) as avgDuration
-      FROM usage_tracking 
-      WHERE createdAt >= ${startDate}
-      GROUP BY DATE_FORMAT(createdAt, ${dateFormat})
-      ORDER BY date ASC
-    `;
+    // Get usage timeline data using Prisma's groupBy instead of raw SQL
+    const usageData = await prisma.usageTracking.findMany({
+      where: {
+        createdAt: {
+          gte: startDate
+        }
+      },
+      select: {
+        createdAt: true,
+        totalCost: true,
+        inputTokens: true,
+        outputTokens: true,
+        duration: true
+      },
+      orderBy: {
+        createdAt: 'asc'
+      }
+    });
+
+    // Process the data to group by date
+    const timelineMap = new Map();
+    
+    usageData.forEach(record => {
+      let dateKey: string;
+      if (timeframe === "24h") {
+        // Group by hour
+        dateKey = record.createdAt.toISOString().substring(0, 13) + ":00:00";
+      } else {
+        // Group by day
+        dateKey = record.createdAt.toISOString().substring(0, 10);
+      }
+      
+      if (!timelineMap.has(dateKey)) {
+        timelineMap.set(dateKey, {
+          date: dateKey,
+          usageCount: 0,
+          totalCost: 0,
+          totalTokens: 0,
+          totalDuration: 0,
+          recordCount: 0
+        });
+      }
+      
+      const dayData = timelineMap.get(dateKey);
+      dayData.usageCount += 1;
+      dayData.totalCost += record.totalCost;
+      dayData.totalTokens += record.inputTokens + record.outputTokens;
+      if (record.duration) {
+        dayData.totalDuration += record.duration;
+        dayData.recordCount += 1;
+      }
+    });
+
+    // Convert to array and calculate averages
+    const timelineData = Array.from(timelineMap.values()).map(item => ({
+      date: item.date,
+      usageCount: item.usageCount,
+      totalCost: item.totalCost,
+      totalTokens: item.totalTokens,
+      avgDuration: item.recordCount > 0 ? item.totalDuration / item.recordCount : 0
+    })).sort((a, b) => a.date.localeCompare(b.date));
 
     res.json({
       success: true,

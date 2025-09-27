@@ -1,11 +1,40 @@
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
-import { AlertTriangle, CheckCircle, XCircle, TrendingUp, TrendingDown } from "lucide-react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+} from "recharts";
+import {
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  TrendingUp,
+  TrendingDown,
+} from "lucide-react";
 import { AnalyticsApiService } from "@/services/analyticsApi";
 
 interface ErrorData {
@@ -22,12 +51,12 @@ interface ErrorAnalysisProps {
 }
 
 const OPERATION_LABELS: Record<string, string> = {
-  AGENT_COMPLETION: 'Agent Completion',
-  INTENT_ANALYSIS: 'Intent Analysis',
-  SUMMARIZATION: 'Summarization',
-  TOPIC_EXTRACTION: 'Topic Extraction',
-  TOOL_CALL: 'Tool Call',
-  EMBEDDING_GENERATION: 'Embedding Generation',
+  AGENT_COMPLETION: "Agent Completion",
+  INTENT_ANALYSIS: "Intent Analysis",
+  SUMMARIZATION: "Summarization",
+  TOPIC_EXTRACTION: "Topic Extraction",
+  TOOL_CALL: "Tool Call",
+  EMBEDDING_GENERATION: "Embedding Generation",
 };
 
 export function ErrorAnalysis({ timeframe }: ErrorAnalysisProps) {
@@ -43,7 +72,7 @@ export function ErrorAnalysis({ timeframe }: ErrorAnalysisProps) {
         setData(result.data.errorRates || []);
         setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
+        setError(err instanceof Error ? err.message : "An error occurred");
       } finally {
         setLoading(false);
       }
@@ -57,7 +86,7 @@ export function ErrorAnalysis({ timeframe }: ErrorAnalysisProps) {
   };
 
   const formatNumber = (num: number) => {
-    return new Intl.NumberFormat('en-US').format(num);
+    return new Intl.NumberFormat("en-US").format(num);
   };
 
   const getOperationLabel = (type: string) => {
@@ -72,16 +101,20 @@ export function ErrorAnalysis({ timeframe }: ErrorAnalysisProps) {
   };
 
   const getErrorIcon = (errorRate: number) => {
-    if (errorRate === 0) return <CheckCircle className="h-4 w-4 text-green-500" />;
-    if (errorRate < 0.05) return <AlertTriangle className="h-4 w-4 text-yellow-500" />;
-    return <XCircle className="h-4 w-4 text-red-500" />;
+    if (errorRate === 0)
+      return <CheckCircle className="w-4 h-4 text-green-500" />;
+    if (errorRate < 0.05)
+      return <AlertTriangle className="w-4 h-4 text-yellow-500" />;
+    return <XCircle className="w-4 h-4 text-red-500" />;
   };
 
   const getTrendIcon = (errorRate: number) => {
     // This is a simplified trend indicator - in a real app you'd compare with previous periods
-    if (errorRate === 0) return <TrendingDown className="h-3 w-3 text-green-500" />;
-    if (errorRate < 0.05) return <TrendingUp className="h-3 w-3 text-yellow-500" />;
-    return <TrendingUp className="h-3 w-3 text-red-500" />;
+    if (errorRate === 0)
+      return <TrendingDown className="w-3 h-3 text-green-500" />;
+    if (errorRate < 0.05)
+      return <TrendingUp className="w-3 h-3 text-yellow-500" />;
+    return <TrendingUp className="w-3 h-3 text-red-500" />;
   };
 
   if (loading) {
@@ -89,20 +122,20 @@ export function ErrorAnalysis({ timeframe }: ErrorAnalysisProps) {
       <div className="space-y-4">
         <Card>
           <CardHeader>
-            <Skeleton className="h-6 w-32" />
-            <Skeleton className="h-4 w-48" />
+            <Skeleton className="w-32 h-6" />
+            <Skeleton className="w-48 h-4" />
           </CardHeader>
           <CardContent>
-            <Skeleton className="h-64 w-full" />
+            <Skeleton className="w-full h-64" />
           </CardContent>
         </Card>
         <Card>
           <CardHeader>
-            <Skeleton className="h-6 w-32" />
-            <Skeleton className="h-4 w-48" />
+            <Skeleton className="w-32 h-6" />
+            <Skeleton className="w-48 h-4" />
           </CardHeader>
           <CardContent>
-            <Skeleton className="h-48 w-full" />
+            <Skeleton className="w-full h-48" />
           </CardContent>
         </Card>
       </div>
@@ -114,7 +147,7 @@ export function ErrorAnalysis({ timeframe }: ErrorAnalysisProps) {
       <Card>
         <CardContent className="pt-6">
           <Alert variant="destructive">
-            <AlertTriangle className="h-4 w-4" />
+            <AlertTriangle className="w-4 h-4" />
             <AlertDescription>
               Error loading error analysis: {error}
             </AlertDescription>
@@ -138,13 +171,17 @@ export function ErrorAnalysis({ timeframe }: ErrorAnalysisProps) {
   return (
     <div className="space-y-4">
       {/* Overall Error Rate Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
+            <div className="flex justify-between items-center">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Overall Error Rate</p>
-                <p className="text-2xl font-bold">{formatPercentage(overallErrorRate)}</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Overall Error Rate
+                </p>
+                <p className="text-2xl font-bold">
+                  {formatPercentage(overallErrorRate)}
+                </p>
               </div>
               {getErrorIcon(overallErrorRate)}
             </div>
@@ -152,23 +189,31 @@ export function ErrorAnalysis({ timeframe }: ErrorAnalysisProps) {
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
+            <div className="flex justify-between items-center">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Requests</p>
-                <p className="text-2xl font-bold">{formatNumber(totalRequests)}</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Total Requests
+                </p>
+                <p className="text-2xl font-bold">
+                  {formatNumber(totalRequests)}
+                </p>
               </div>
-              <CheckCircle className="h-8 w-8 text-blue-500" />
+              <CheckCircle className="w-8 h-8 text-blue-500" />
             </div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
-            <div className="flex items-center justify-between">
+            <div className="flex justify-between items-center">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Errors</p>
-                <p className="text-2xl font-bold">{formatNumber(totalErrors)}</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Total Errors
+                </p>
+                <p className="text-2xl font-bold">
+                  {formatNumber(totalErrors)}
+                </p>
               </div>
-              <XCircle className="h-8 w-8 text-red-500" />
+              <XCircle className="w-8 h-8 text-red-500" />
             </div>
           </CardContent>
         </Card>
@@ -178,27 +223,26 @@ export function ErrorAnalysis({ timeframe }: ErrorAnalysisProps) {
       <Card>
         <CardHeader>
           <CardTitle>Error Rates by Operation</CardTitle>
-          <CardDescription>Error percentage for each operation type</CardDescription>
+          <CardDescription>
+            Error percentage for each operation type
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" />
-              <XAxis 
-                dataKey="name" 
+              <XAxis
+                dataKey="name"
                 fontSize={12}
                 angle={-45}
                 textAnchor="end"
                 height={80}
               />
-              <YAxis 
-                tickFormatter={(value) => `${value}%`}
-                fontSize={12}
-              />
-              <Tooltip 
+              <YAxis tickFormatter={(value) => `${value}%`} fontSize={12} />
+              <Tooltip
                 formatter={(value: number, name: string) => [
-                  `${value.toFixed(2)}%`, 
-                  name === 'errorRate' ? 'Error Rate' : 'Success Rate'
+                  `${value.toFixed(2)}%`,
+                  name === "errorRate" ? "Error Rate" : "Success Rate",
                 ]}
               />
               <Bar dataKey="errorRate" fill="#ef4444" name="Error Rate" />
@@ -212,11 +256,13 @@ export function ErrorAnalysis({ timeframe }: ErrorAnalysisProps) {
       <Card>
         <CardHeader>
           <CardTitle>Error Analysis Details</CardTitle>
-          <CardDescription>Detailed breakdown of errors by operation type</CardDescription>
+          <CardDescription>
+            Detailed breakdown of errors by operation type
+          </CardDescription>
         </CardHeader>
         <CardContent>
           {data.length === 0 ? (
-            <div className="text-center text-muted-foreground py-8">
+            <div className="py-8 text-center text-muted-foreground">
               No error data available for the selected timeframe
             </div>
           ) : (
@@ -241,17 +287,17 @@ export function ErrorAnalysis({ timeframe }: ErrorAnalysisProps) {
                       {formatNumber(item.totalRequests)}
                     </TableCell>
                     <TableCell className="text-right">
-                      <span className="text-green-600 font-medium">
+                      <span className="font-medium text-green-600">
                         {formatNumber(item.successCount)}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      <span className="text-red-600 font-medium">
+                      <span className="font-medium text-red-600">
                         {formatNumber(item.errorCount)}
                       </span>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex gap-2 justify-end items-center">
                         <Badge variant={getErrorBadgeVariant(item.errorRate)}>
                           {formatPercentage(item.errorRate)}
                         </Badge>
@@ -259,7 +305,7 @@ export function ErrorAnalysis({ timeframe }: ErrorAnalysisProps) {
                       </div>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end">
+                      <div className="flex justify-end items-center">
                         {getErrorIcon(item.errorRate)}
                       </div>
                     </TableCell>
@@ -274,9 +320,9 @@ export function ErrorAnalysis({ timeframe }: ErrorAnalysisProps) {
       {/* Health Status Alert */}
       {overallErrorRate > 0.1 && (
         <Alert variant="destructive">
-          <AlertTriangle className="h-4 w-4" />
+          <AlertTriangle className="w-4 h-4" />
           <AlertDescription>
-            High error rate detected ({formatPercentage(overallErrorRate)}). 
+            High error rate detected ({formatPercentage(overallErrorRate)}).
             Consider investigating the most problematic operations.
           </AlertDescription>
         </Alert>

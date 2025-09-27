@@ -230,20 +230,20 @@ export class UsageTrackingService {
         // Daily usage (last 30 days)
         this.prisma.$queryRaw`
         SELECT 
-          DATE(created_at) as date,
-          SUM(total_cost) as total_cost,
-          SUM(total_tokens) as total_tokens,
-          operation_type,
+          "createdAt"::date as date,
+          SUM("totalCost") as total_cost,
+          SUM("totalTokens") as total_tokens,
+          "operationType",
           COUNT(*) as count
         FROM usage_tracking 
-        WHERE created_at >= NOW() - INTERVAL '30 days'
+        WHERE "createdAt" >= NOW() - INTERVAL '30 days'
         ${
           filters.conversationId
-            ? `AND conversation_id = ${filters.conversationId}`
+            ? `AND "conversationId" = ${filters.conversationId}`
             : ""
         }
-        ${filters.userId ? `AND user_id = ${filters.userId}` : ""}
-        GROUP BY DATE(created_at), operation_type
+        ${filters.userId ? `AND "userId" = ${filters.userId}` : ""}
+        GROUP BY "createdAt"::date, "operationType"
         ORDER BY date DESC
       `,
       ]);
