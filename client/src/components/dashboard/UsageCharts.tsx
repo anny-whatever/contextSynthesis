@@ -15,17 +15,25 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  AreaChart,
-  Area,
+  ScatterChart,
+  Scatter,
 } from "recharts";
 import { AnalyticsApiService } from "@/services/analyticsApi";
 
-interface TimelineData {
-  date: string;
-  usageCount: number;
+interface MessageUsageData {
+  messageId: string;
   totalCost: number;
   totalTokens: number;
-  avgDuration: number;
+  inputTokens: number;
+  outputTokens: number;
+  operationCount: number;
+  totalDuration: number;
+  lastActivity: string;
+  messageContent: string;
+  messageRole: string;
+  conversationTitle: string;
+  conversationId: string;
+  createdAt: string;
 }
 
 interface UsageChartsProps {
@@ -34,26 +42,29 @@ interface UsageChartsProps {
 }
 
 export function UsageCharts({ timeframe, detailed = false }: UsageChartsProps) {
-  const [data, setData] = useState<TimelineData[]>([]);
+  const [data, setData] = useState<MessageUsageData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchTimelineData = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
-        const result = await AnalyticsApiService.getUsageTimeline(timeframe);
-        setData(result.data.timeline || []);
         setError(null);
+        const response = await AnalyticsApiService.getPerMessageUsage(
+          timeframe,
+          detailed ? 100 : 50
+        );
+        setData(response.data.messages || []);
       } catch (err) {
-        setError(err instanceof Error ? err.message : "An error occurred");
+        setError(err instanceof Error ? err.message : "Failed to fetch data");
       } finally {
         setLoading(false);
       }
     };
 
-    fetchTimelineData();
-  }, [timeframe]);
+    fetchData();
+  }, [timeframe, detailed]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -67,15 +78,37 @@ export function UsageCharts({ timeframe, detailed = false }: UsageChartsProps) {
     return new Intl.NumberFormat("en-US").format(value);
   };
 
-  const formatDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    if (timeframe === "24h") {
-      return date.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-      });
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-US", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-background border rounded-lg p-3 shadow-lg">
+          <p className="font-medium">{`Message: ${data.messageContent}`}</p>
+          <p className="text-sm text-muted-foreground">{`Role: ${data.messageRole}`}</p>
+          <p className="text-sm text-muted-foreground">{`Conversation: ${
+            data.conversationTitle || "Untitled"
+          }`}</p>
+          <p className="text-sm">{`Cost: ${formatCurrency(data.totalCost)}`}</p>
+          <p className="text-sm">{`Tokens: ${formatNumber(
+            data.totalTokens
+          )}`}</p>
+          <p className="text-sm">{`Operations: ${data.operationCount}`}</p>
+          <p className="text-sm text-muted-foreground">{`Created: ${formatDate(
+            data.createdAt
+          )}`}</p>
+        </div>
+      );
     }
-    return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    return null;
   };
 
   if (loading) {
@@ -92,15 +125,6 @@ export function UsageCharts({ timeframe, detailed = false }: UsageChartsProps) {
         </Card>
         {detailed && (
           <>
-            <Card>
-              <CardHeader>
-                <Skeleton className="w-32 h-6" />
-                <Skeleton className="w-48 h-4" />
-              </CardHeader>
-              <CardContent>
-                <Skeleton className="w-full h-64" />
-              </CardContent>
-            </Card>
             <Card>
               <CardHeader>
                 <Skeleton className="w-32 h-6" />
@@ -128,31 +152,49 @@ export function UsageCharts({ timeframe, detailed = false }: UsageChartsProps) {
     );
   }
 
+  // Prepare data for charts - sort by creation time for line chart
+  const sortedData = [...data].sort(
+    (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+  );
+
+  // Add index for x-axis
+  const chartData = sortedData.map((item, index) => ({
+    ...item,
+    messageIndex: index + 1,
+    shortContent:
+      item.messageContent.length > 30
+        ? item.messageContent.substring(0, 30) + "..."
+        : item.messageContent,
+  }));
+
   const charts = [
     {
-      title: "Usage Count Over Time",
-      description: "Number of API calls per period",
-      dataKey: "usageCount",
-      color: "#3b82f6",
-      formatter: formatNumber,
-    },
-    {
-      title: "Cost Over Time",
-      description: "Total cost per period",
+      title: "Cost per Message",
+      description: "Total cost for each message's operations",
       dataKey: "totalCost",
       color: "#10b981",
       formatter: formatCurrency,
+      type: "line" as const,
     },
     {
-      title: "Token Usage Over Time",
-      description: "Total tokens consumed per period",
+      title: "Token Usage per Message",
+      description: "Total tokens consumed per message",
       dataKey: "totalTokens",
       color: "#8b5cf6",
       formatter: formatNumber,
+      type: "line" as const,
+    },
+    {
+      title: "Cost vs Token Usage",
+      description: "Relationship between cost and token usage per message",
+      xDataKey: "totalTokens",
+      yDataKey: "totalCost",
+      color: "#3b82f6",
+      type: "scatter" as const,
     },
   ];
 
-  const chartsToShow = detailed ? charts : [charts[0]];
+  const chartsToShow = detailed ? charts : [charts[0], charts[1]];
 
   return (
     <div className={`grid gap-4 ${detailed ? "grid-cols-1" : "grid-cols-1"}`}>
@@ -164,34 +206,123 @@ export function UsageCharts({ timeframe, detailed = false }: UsageChartsProps) {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              <AreaChart data={data}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis
-                  dataKey="date"
-                  tickFormatter={formatDate}
-                  fontSize={12}
-                />
-                <YAxis tickFormatter={chart.formatter} fontSize={12} />
-                <Tooltip
-                  labelFormatter={(label) => formatDate(label)}
-                  formatter={(value: number) => [
-                    chart.formatter(value),
-                    chart.title.split(" ")[0],
-                  ]}
-                />
-                <Area
-                  type="monotone"
-                  dataKey={chart.dataKey}
-                  stroke={chart.color}
-                  fill={chart.color}
-                  fillOpacity={0.1}
-                  strokeWidth={2}
-                />
-              </AreaChart>
+              {chart.type === "scatter" ? (
+                <ScatterChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey={chart.xDataKey}
+                    tickFormatter={formatNumber}
+                    fontSize={12}
+                    label={{
+                      value: "Total Tokens",
+                      position: "insideBottom",
+                      offset: -5,
+                    }}
+                  />
+                  <YAxis
+                    tickFormatter={formatCurrency}
+                    fontSize={12}
+                    label={{
+                      value: "Total Cost ($)",
+                      angle: -90,
+                      position: "insideLeft",
+                    }}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Scatter
+                    dataKey={chart.yDataKey}
+                    fill={chart.color}
+                    fillOpacity={0.6}
+                  />
+                </ScatterChart>
+              ) : (
+                <LineChart data={chartData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="messageIndex"
+                    fontSize={12}
+                    label={{
+                      value: "Message Sequence",
+                      position: "insideBottom",
+                      offset: -5,
+                    }}
+                  />
+                  <YAxis
+                    tickFormatter={chart.formatter}
+                    fontSize={12}
+                    label={{
+                      value:
+                        chart.dataKey === "totalCost" ? "Cost ($)" : "Tokens",
+                      angle: -90,
+                      position: "insideLeft",
+                    }}
+                  />
+                  <Tooltip content={<CustomTooltip />} />
+                  <Line
+                    type="monotone"
+                    dataKey={chart.dataKey}
+                    stroke={chart.color}
+                    strokeWidth={2}
+                    dot={{ fill: chart.color, strokeWidth: 2, r: 4 }}
+                    activeDot={{ r: 6, stroke: chart.color, strokeWidth: 2 }}
+                  />
+                </LineChart>
+              )}
             </ResponsiveContainer>
           </CardContent>
         </Card>
       ))}
+
+      {/* Summary stats */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Message Usage Summary</CardTitle>
+          <CardDescription>
+            Aggregate statistics for the selected timeframe
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <div className="text-center">
+              <div className="text-2xl font-bold text-blue-600">
+                {data.length}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Total Messages
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-green-600">
+                {formatCurrency(
+                  data.reduce((sum, item) => sum + item.totalCost, 0)
+                )}
+              </div>
+              <div className="text-sm text-muted-foreground">Total Cost</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-purple-600">
+                {formatNumber(
+                  data.reduce((sum, item) => sum + item.totalTokens, 0)
+                )}
+              </div>
+              <div className="text-sm text-muted-foreground">Total Tokens</div>
+            </div>
+            <div className="text-center">
+              <div className="text-2xl font-bold text-orange-600">
+                {formatCurrency(
+                  data.length > 0
+                    ? data.reduce((sum, item) => sum + item.totalCost, 0) /
+                        data.length
+                    : 0
+                )}
+              </div>
+              <div className="text-sm text-muted-foreground">
+                Avg Cost/Message
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

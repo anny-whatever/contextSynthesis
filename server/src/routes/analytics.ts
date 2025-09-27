@@ -12,11 +12,11 @@ router.get(
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { timeframe = "7d" } = req.query;
-    
+
     // Calculate date range based on timeframe
     const now = new Date();
     let startDate = new Date();
-    
+
     switch (timeframe) {
       case "24h":
         startDate.setHours(now.getHours() - 24);
@@ -41,74 +41,74 @@ router.get(
       totalTokens,
       totalMessages,
       totalConversations,
-      avgResponseTime
+      avgResponseTime,
     ] = await Promise.all([
       // Total usage records
       prisma.usageTracking.count({
         where: {
           createdAt: {
-            gte: startDate
-          }
-        }
+            gte: startDate,
+          },
+        },
       }),
-      
+
       // Total cost
       prisma.usageTracking.aggregate({
         where: {
           createdAt: {
-            gte: startDate
-          }
+            gte: startDate,
+          },
         },
         _sum: {
-          totalCost: true
-        }
+          totalCost: true,
+        },
       }),
-      
+
       // Total tokens
       prisma.usageTracking.aggregate({
         where: {
           createdAt: {
-            gte: startDate
-          }
+            gte: startDate,
+          },
         },
         _sum: {
           inputTokens: true,
-          outputTokens: true
-        }
+          outputTokens: true,
+        },
       }),
-      
+
       // Total messages
       prisma.message.count({
         where: {
           createdAt: {
-            gte: startDate
-          }
-        }
+            gte: startDate,
+          },
+        },
       }),
-      
+
       // Total conversations
       prisma.conversation.count({
         where: {
           createdAt: {
-            gte: startDate
-          }
-        }
+            gte: startDate,
+          },
+        },
       }),
-      
+
       // Average response time
       prisma.usageTracking.aggregate({
         where: {
           createdAt: {
-            gte: startDate
+            gte: startDate,
           },
           duration: {
-            not: null
-          }
+            not: null,
+          },
         },
         _avg: {
-          duration: true
-        }
-      })
+          duration: true,
+        },
+      }),
     ]);
 
     res.json({
@@ -118,14 +118,16 @@ router.get(
         overview: {
           totalUsages,
           totalCost: totalCost._sum.totalCost || 0,
-          totalTokens: (totalTokens._sum.inputTokens || 0) + (totalTokens._sum.outputTokens || 0),
+          totalTokens:
+            (totalTokens._sum.inputTokens || 0) +
+            (totalTokens._sum.outputTokens || 0),
           inputTokens: totalTokens._sum.inputTokens || 0,
           outputTokens: totalTokens._sum.outputTokens || 0,
           totalMessages,
           totalConversations,
-          avgResponseTime: avgResponseTime._avg.duration || 0
-        }
-      }
+          avgResponseTime: avgResponseTime._avg.duration || 0,
+        },
+      },
     });
   })
 );
@@ -136,10 +138,10 @@ router.get(
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { timeframe = "7d" } = req.query;
-    
+
     const now = new Date();
     let startDate = new Date();
-    
+
     switch (timeframe) {
       case "24h":
         startDate.setHours(now.getHours() - 24);
@@ -158,24 +160,24 @@ router.get(
     }
 
     const usageByOperation = await prisma.usageTracking.groupBy({
-      by: ['operationType'],
+      by: ["operationType"],
       where: {
         createdAt: {
-          gte: startDate
-        }
+          gte: startDate,
+        },
       },
       _count: {
-        id: true
+        id: true,
       },
       _sum: {
         totalCost: true,
         inputTokens: true,
         outputTokens: true,
-        duration: true
+        duration: true,
       },
       _avg: {
-        duration: true
-      }
+        duration: true,
+      },
     });
 
     res.json({
@@ -188,11 +190,12 @@ router.get(
           totalCost: item._sum.totalCost || 0,
           totalInputTokens: item._sum.inputTokens || 0,
           totalOutputTokens: item._sum.outputTokens || 0,
-          totalTokens: (item._sum.inputTokens || 0) + (item._sum.outputTokens || 0),
+          totalTokens:
+            (item._sum.inputTokens || 0) + (item._sum.outputTokens || 0),
           totalDuration: item._sum.duration || 0,
-          avgDuration: item._avg.duration || 0
-        }))
-      }
+          avgDuration: item._avg.duration || 0,
+        })),
+      },
     });
   })
 );
@@ -203,11 +206,11 @@ router.get(
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { timeframe = "7d", granularity = "day" } = req.query;
-    
+
     const now = new Date();
     let startDate = new Date();
     let dateFormat = "%Y-%m-%d";
-    
+
     switch (timeframe) {
       case "24h":
         startDate.setHours(now.getHours() - 24);
@@ -233,25 +236,25 @@ router.get(
     const usageData = await prisma.usageTracking.findMany({
       where: {
         createdAt: {
-          gte: startDate
-        }
+          gte: startDate,
+        },
       },
       select: {
         createdAt: true,
         totalCost: true,
         inputTokens: true,
         outputTokens: true,
-        duration: true
+        duration: true,
       },
       orderBy: {
-        createdAt: 'asc'
-      }
+        createdAt: "asc",
+      },
     });
 
     // Process the data to group by date
     const timelineMap = new Map();
-    
-    usageData.forEach(record => {
+
+    usageData.forEach((record) => {
       let dateKey: string;
       if (timeframe === "24h") {
         // Group by hour
@@ -260,7 +263,7 @@ router.get(
         // Group by day
         dateKey = record.createdAt.toISOString().substring(0, 10);
       }
-      
+
       if (!timelineMap.has(dateKey)) {
         timelineMap.set(dateKey, {
           date: dateKey,
@@ -268,10 +271,10 @@ router.get(
           totalCost: 0,
           totalTokens: 0,
           totalDuration: 0,
-          recordCount: 0
+          recordCount: 0,
         });
       }
-      
+
       const dayData = timelineMap.get(dateKey);
       dayData.usageCount += 1;
       dayData.totalCost += record.totalCost;
@@ -283,21 +286,24 @@ router.get(
     });
 
     // Convert to array and calculate averages
-    const timelineData = Array.from(timelineMap.values()).map(item => ({
-      date: item.date,
-      usageCount: item.usageCount,
-      totalCost: item.totalCost,
-      totalTokens: item.totalTokens,
-      avgDuration: item.recordCount > 0 ? item.totalDuration / item.recordCount : 0
-    })).sort((a, b) => a.date.localeCompare(b.date));
+    const timelineData = Array.from(timelineMap.values())
+      .map((item) => ({
+        date: item.date,
+        usageCount: item.usageCount,
+        totalCost: item.totalCost,
+        totalTokens: item.totalTokens,
+        avgDuration:
+          item.recordCount > 0 ? item.totalDuration / item.recordCount : 0,
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
 
     res.json({
       success: true,
       data: {
         timeframe,
         granularity,
-        timeline: timelineData
-      }
+        timeline: timelineData,
+      },
     });
   })
 );
@@ -308,10 +314,10 @@ router.get(
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { timeframe = "7d", limit = 10 } = req.query;
-    
+
     const now = new Date();
     let startDate = new Date();
-    
+
     switch (timeframe) {
       case "24h":
         startDate.setHours(now.getHours() - 24);
@@ -331,27 +337,27 @@ router.get(
 
     // Get aggregated usage data
     const topUsersData = await prisma.usageTracking.groupBy({
-      by: ['userId'],
+      by: ["userId"],
       where: {
         createdAt: {
-          gte: startDate
-        }
+          gte: startDate,
+        },
       },
       _count: {
-        id: true
+        id: true,
       },
       _sum: {
         totalCost: true,
         inputTokens: true,
         outputTokens: true,
-        duration: true
+        duration: true,
       },
       orderBy: {
         _sum: {
-          totalCost: 'desc'
-        }
+          totalCost: "desc",
+        },
       },
-      take: Number(limit)
+      take: Number(limit),
     });
 
     // Get user details and additional metrics
@@ -359,39 +365,47 @@ router.get(
       topUsersData.map(async (userData: any) => {
         const user = await prisma.user.findUnique({
           where: { id: userData.userId },
-          select: { id: true, email: true, name: true }
+          select: { id: true, email: true, name: true },
         });
 
         // Get additional metrics for this user
         const additionalMetrics = await prisma.usageTracking.aggregate({
           where: {
             userId: userData.userId,
-            createdAt: { gte: startDate }
+            createdAt: { gte: startDate },
           },
           _count: {
-            conversationId: true
-          }
+            conversationId: true,
+          },
         });
 
         // Get unique conversation count
         const conversationCount = await prisma.usageTracking.findMany({
           where: {
             userId: userData.userId,
-            createdAt: { gte: startDate }
+            createdAt: { gte: startDate },
           },
           select: { conversationId: true },
-          distinct: ['conversationId']
+          distinct: ["conversationId"],
         });
 
         return {
           userId: userData.userId,
-          user: user || { id: userData.userId, email: 'Unknown User', name: null },
+          user: user || {
+            id: userData.userId,
+            email: "Unknown User",
+            name: null,
+          },
           totalUsage: userData._count.id,
           totalCost: userData._sum.totalCost || 0,
-          totalTokens: (userData._sum.inputTokens || 0) + (userData._sum.outputTokens || 0),
+          totalTokens:
+            (userData._sum.inputTokens || 0) +
+            (userData._sum.outputTokens || 0),
           messageCount: userData._count.id,
           conversationCount: conversationCount.length,
-          avgResponseTime: userData._sum.duration ? (userData._sum.duration / userData._count.id) : 0
+          avgResponseTime: userData._sum.duration
+            ? userData._sum.duration / userData._count.id
+            : 0,
         };
       })
     );
@@ -400,8 +414,8 @@ router.get(
       success: true,
       data: {
         timeframe,
-        topUsers: topUsersWithDetails
-      }
+        topUsers: topUsersWithDetails,
+      },
     });
   })
 );
@@ -412,10 +426,10 @@ router.get(
   apiLimiter,
   asyncHandler(async (req: Request, res: Response) => {
     const { timeframe = "7d" } = req.query;
-    
+
     const now = new Date();
     let startDate = new Date();
-    
+
     switch (timeframe) {
       case "24h":
         startDate.setHours(now.getHours() - 24);
@@ -437,35 +451,35 @@ router.get(
       prisma.usageTracking.count({
         where: {
           createdAt: {
-            gte: startDate
-          }
-        }
+            gte: startDate,
+          },
+        },
       }),
       prisma.usageTracking.count({
         where: {
           createdAt: {
-            gte: startDate
+            gte: startDate,
           },
           errorMessage: {
-            not: null
-          }
-        }
-      })
+            not: null,
+          },
+        },
+      }),
     ]);
 
     const errorsByType = await prisma.usageTracking.groupBy({
-      by: ['operationType'],
+      by: ["operationType"],
       where: {
         createdAt: {
-          gte: startDate
+          gte: startDate,
         },
         errorMessage: {
-          not: null
-        }
+          not: null,
+        },
       },
       _count: {
-        id: true
-      }
+        id: true,
+      },
     });
 
     const errorRate = totalUsages > 0 ? (errorUsages / totalUsages) * 100 : 0;
@@ -479,9 +493,246 @@ router.get(
         errorUsages,
         errorsByType: errorsByType.map((item: any) => ({
           operationType: item.operationType,
-          errorCount: item._count.id
-        }))
+          errorCount: item._count.id,
+        })),
+      },
+    });
+  })
+);
+
+// GET /api/analytics/per-message-usage - Get usage aggregated per message
+router.get(
+  "/per-message-usage",
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { timeframe = "7d", limit = 50 } = req.query;
+
+    const now = new Date();
+    let startDate = new Date();
+
+    switch (timeframe) {
+      case "24h":
+        startDate.setHours(now.getHours() - 24);
+        break;
+      case "7d":
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case "30d":
+        startDate.setDate(now.getDate() - 30);
+        break;
+      case "90d":
+        startDate.setDate(now.getDate() - 90);
+        break;
+      default:
+        startDate.setDate(now.getDate() - 7);
+    }
+
+    // Get usage data grouped by messageId
+    const messageUsage = await prisma.usageTracking.groupBy({
+      by: ["messageId"],
+      where: {
+        messageId: {
+          not: null,
+        },
+        createdAt: {
+          gte: startDate,
+        },
+      },
+      _sum: {
+        totalCost: true,
+        inputTokens: true,
+        outputTokens: true,
+        totalTokens: true,
+        duration: true,
+      },
+      _count: {
+        id: true,
+      },
+      _max: {
+        createdAt: true,
+      },
+      orderBy: {
+        _max: {
+          createdAt: "desc",
+        },
+      },
+      take: parseInt(limit as string),
+    });
+
+    // Get message details for the messageIds
+    const messageIds = messageUsage
+      .map((item) => item.messageId)
+      .filter(Boolean);
+    const messages = await prisma.message.findMany({
+      where: {
+        id: {
+          in: messageIds as string[],
+        },
+      },
+      select: {
+        id: true,
+        content: true,
+        role: true,
+        createdAt: true,
+        conversationId: true,
+        conversation: {
+          select: {
+            title: true,
+          },
+        },
+      },
+    });
+
+    const messageMap = new Map(messages.map((msg) => [msg.id, msg]));
+
+    const enrichedData = messageUsage.map((usage) => {
+      const message = messageMap.get(usage.messageId!);
+      return {
+        messageId: usage.messageId,
+        totalCost: usage._sum.totalCost || 0,
+        totalTokens: usage._sum.totalTokens || 0,
+        inputTokens: usage._sum.inputTokens || 0,
+        outputTokens: usage._sum.outputTokens || 0,
+        operationCount: usage._count.id,
+        totalDuration: usage._sum.duration || 0,
+        lastActivity: usage._max.createdAt,
+        messageContent:
+          message?.content?.substring(0, 100) +
+          (message?.content && message.content.length > 100 ? "..." : ""),
+        messageRole: message?.role,
+        conversationTitle: message?.conversation?.title,
+        conversationId: message?.conversationId,
+        createdAt: message?.createdAt,
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        timeframe,
+        messages: enrichedData,
+        totalMessages: enrichedData.length,
+      },
+    });
+  })
+);
+
+// GET /api/analytics/operation-cost-breakdown - Get cost breakdown by operation type and subtype
+router.get(
+  "/operation-cost-breakdown",
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { timeframe = "7d" } = req.query;
+
+    const now = new Date();
+    let startDate = new Date();
+
+    switch (timeframe) {
+      case "24h":
+        startDate.setHours(now.getHours() - 24);
+        break;
+      case "7d":
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case "30d":
+        startDate.setDate(now.getDate() - 30);
+        break;
+      case "90d":
+        startDate.setDate(now.getDate() - 90);
+        break;
+      default:
+        startDate.setDate(now.getDate() - 7);
+    }
+
+    // Get operation breakdown data
+    const operationBreakdown = await prisma.usageTracking.groupBy({
+      by: ["operationType", "operationSubtype"],
+      where: {
+        createdAt: {
+          gte: startDate,
+        },
+      },
+      _sum: {
+        totalCost: true,
+        inputTokens: true,
+        outputTokens: true,
+        totalTokens: true,
+      },
+      _count: {
+        id: true,
+      },
+      orderBy: {
+        _sum: {
+          totalCost: "desc",
+        },
+      },
+    });
+
+    // Get timeline data for operation costs
+    const timelineData = await prisma.usageTracking.findMany({
+      where: {
+        createdAt: {
+          gte: startDate,
+        },
+      },
+      select: {
+        createdAt: true,
+        operationType: true,
+        operationSubtype: true,
+        totalCost: true,
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    // Process timeline data for area chart
+    const timelineMap = new Map();
+    const operationTypes = new Set();
+
+    timelineData.forEach((record) => {
+      const dateKey = record.createdAt.toISOString().substring(0, 10);
+      const operationKey = record.operationSubtype || record.operationType;
+      operationTypes.add(operationKey);
+
+      if (!timelineMap.has(dateKey)) {
+        timelineMap.set(dateKey, {
+          date: dateKey,
+          total: 0,
+        });
       }
+
+      const dayData = timelineMap.get(dateKey);
+      if (!dayData[operationKey]) {
+        dayData[operationKey] = 0;
+      }
+      dayData[operationKey] += record.totalCost;
+      dayData.total += record.totalCost;
+    });
+
+    const timeline = Array.from(timelineMap.values()).sort((a, b) =>
+      a.date.localeCompare(b.date)
+    );
+
+    const breakdown = operationBreakdown.map((item) => ({
+      operationType: item.operationType,
+      operationSubtype: item.operationSubtype,
+      displayName: item.operationSubtype || item.operationType,
+      totalCost: item._sum.totalCost || 0,
+      totalTokens: item._sum.totalTokens || 0,
+      inputTokens: item._sum.inputTokens || 0,
+      outputTokens: item._sum.outputTokens || 0,
+      operationCount: item._count.id,
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        timeframe,
+        breakdown,
+        timeline,
+        operationTypes: Array.from(operationTypes),
+      },
     });
   })
 );

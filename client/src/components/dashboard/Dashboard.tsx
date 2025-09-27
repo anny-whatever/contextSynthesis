@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { OverviewMetrics } from "./OverviewMetrics";
 import { UsageCharts } from "./UsageCharts";
+import { OperationCostCharts } from "./OperationCostCharts";
 import { OperationBreakdown } from "./OperationBreakdown";
 import { TopUsers } from "./TopUsers";
 import { ErrorAnalysis } from "./ErrorAnalysis";
@@ -101,12 +102,13 @@ export function Dashboard() {
             <OverviewMetrics timeframe={timeframe} />
             <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <UsageCharts timeframe={timeframe} />
-              <OperationBreakdown timeframe={timeframe} />
+              <OperationCostCharts timeframe={timeframe} />
             </div>
           </TabsContent>
 
           <TabsContent value="usage" className="space-y-6">
             <UsageCharts timeframe={timeframe} detailed />
+            <OperationCostCharts timeframe={timeframe} detailed />
           </TabsContent>
 
           <TabsContent value="operations" className="space-y-6">
