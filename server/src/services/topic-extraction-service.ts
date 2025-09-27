@@ -66,7 +66,7 @@ Your summaries MUST be comprehensive and detailed, capturing ALL important infor
 - OUTCOMES: Results, decisions made, next steps, action items
 
 For each topic, provide:
-- topicName: Specific, descriptive name (2-6 words)
+- topicName: Descriptive one-liner that captures the essence and context of the topic for semantic search (8-15 words, be specific and contextual)
 - relevanceScore: 0.0-1.0 based on how much conversation time was spent on this topic
 - relatedTopics: Array of closely connected topic names
 - keyMessages: Array of the most important message excerpts for this topic (max 3)
