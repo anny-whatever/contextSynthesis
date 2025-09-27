@@ -650,13 +650,32 @@ Use this context to provide more relevant and focused responses that align with 
     userId?: string
   ): Promise<ConversationContext> {
     try {
+      // Determine how many recent messages to load based on intent analysis
+      let recentMessageLimit = 6; // Default: last 3 turns
+      
+      // Adjust based on context retrieval strategy
+      switch (intentAnalysis.contextRetrievalStrategy) {
+        case "none":
+          recentMessageLimit = 2; // Just current exchange
+          break;
+        case "recent_only":
+          recentMessageLimit = 6; // Last 3 turns
+          break;
+        case "semantic_search":
+        case "date_based_search":
+        case "all_available":
+          // For these strategies, we still want recent context but rely more on summaries
+          recentMessageLimit = Math.min(10, this.config.maxConversationHistory); // Up to 5 turns or config limit
+          break;
+      }
+
       const conversation = await this.prisma.conversation.findUnique({
         where: { id: conversationId },
         include: {
-          // Always get the last 6 messages (3 turns) regardless of summary status
+          // Dynamically load recent messages based on intent analysis
           messages: {
             orderBy: { createdAt: "desc" },
-            take: 6, // Last 3 turns (USER + ASSISTANT pairs)
+            take: recentMessageLimit,
             include: {
               toolUsages: true,
             },
@@ -676,7 +695,7 @@ Use this context to provide more relevant and focused responses that align with 
         };
       }
 
-      // Transform the last 3 turns of messages (reverse order since we got them desc)
+      // Transform recent messages (reverse order since we got them desc)
       const messageHistory: MessageContext[] = conversation.messages
         .reverse() // Reverse to get chronological order (oldest first)
         .map((msg) => ({

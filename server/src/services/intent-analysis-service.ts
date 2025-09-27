@@ -439,6 +439,16 @@ GUIDELINES:
       // With structured output, this is guaranteed to be valid JSON
       const analysis = JSON.parse(analysisText);
 
+      // Debug logging for date-based queries
+      if (analysis.contextRetrievalStrategy === "date_based_search") {
+        console.log("🗓️ [DEBUG] Date-based search detected:", {
+          dateQuery: analysis.dateQuery,
+          includeHours: analysis.includeHours,
+          maxContextItems: analysis.maxContextItems,
+          currentPrompt: currentPrompt.substring(0, 100) + "...",
+        });
+      }
+
       return {
         currentIntent: analysis.currentIntent,
         contextualRelevance: analysis.contextualRelevance,
@@ -452,6 +462,8 @@ GUIDELINES:
         contextRetrievalStrategy: analysis.contextRetrievalStrategy,
         semanticSearchQueries: analysis.semanticSearchQueries,
         maxContextItems: analysis.maxContextItems,
+        dateQuery: analysis.dateQuery,
+        includeHours: analysis.includeHours,
       };
     } catch (error) {
       console.error("Intent analysis failed:", error);
