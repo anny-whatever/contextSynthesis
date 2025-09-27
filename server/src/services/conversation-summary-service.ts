@@ -218,7 +218,7 @@ export class ConversationSummaryService {
         id: allMessages[allMessages.length - 1]!.id,
         role: allMessages[allMessages.length - 1]!.role,
         createdAt: allMessages[allMessages.length - 1]!.createdAt.toISOString(),
-        contentPreview: allMessages[allMessages.length - 1]!.content?.substring(0, 100) + "..."
+        content: allMessages[allMessages.length - 1]!.content // Show full content
       } : null,
       messageContentCheck: allMessages.map(msg => ({
         id: msg.id,
@@ -226,7 +226,7 @@ export class ConversationSummaryService {
         hasContent: !!msg.content,
         contentLength: msg.content?.length || 0,
         createdAt: msg.createdAt.toISOString(),
-        contentPreview: msg.content?.substring(0, 100) + "..."
+        content: msg.content // Show full content
       }))
     });
 

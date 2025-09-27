@@ -163,7 +163,7 @@ Always be helpful, accurate, and cite your sources when using web search results
 
       // Console logging: System prompt and messages
       console.log("💬 [AGENT] Prepared messages for OpenAI:", {
-        systemPrompt: messages[0].content.substring(0, 200) + "...", // Show actual enhanced system prompt
+        systemPrompt: messages[0].content, // Show full enhanced system prompt
         messageCount: messages.length,
         totalCharacters: JSON.stringify(messages).length,
       });
@@ -172,7 +172,7 @@ Always be helpful, accurate, and cite your sources when using web search results
         messages: messages.map((msg) => ({
           role: msg.role,
           contentLength: msg.content?.length || 0,
-          contentPreview: msg.content?.substring(0, 100) + "...",
+          content: msg.content, // Show full content instead of preview
         })),
       });
 
@@ -559,8 +559,7 @@ Use this context to provide more relevant and focused responses that align with 
       systemPromptLength: systemPrompt.length,
       includesSummarySection: systemPrompt.includes("## CONVERSATION HISTORY SUMMARIES"),
       includesSummaryText: systemPrompt.includes("Summary 1"),
-      systemPromptPreview: systemPrompt.substring(0, 500) + "...",
-      systemPromptEnd: "..." + systemPrompt.substring(systemPrompt.length - 500)
+      fullSystemPrompt: systemPrompt // Show complete system prompt
     });
 
     // Add conversation history (limit to maxConversationHistory)

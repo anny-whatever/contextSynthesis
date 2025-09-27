@@ -282,15 +282,15 @@ Do NOT create brief summaries. Create comprehensive, detailed summaries that pre
     }
     
     // Add message content summary
-    const firstUserMessage = userMessages[0]?.content?.substring(0, 200) || '';
-    const lastUserMessage = userMessages[userMessages.length - 1]?.content?.substring(0, 200) || '';
+    const firstUserMessage = userMessages[0]?.content || '';
+    const lastUserMessage = userMessages[userMessages.length - 1]?.content || '';
     
     if (firstUserMessage) {
-      summary += `Initial topic: ${firstUserMessage}${firstUserMessage.length >= 200 ? '...' : ''}. `;
+      summary += `Initial topic: ${firstUserMessage}. `;
     }
     
     if (lastUserMessage && lastUserMessage !== firstUserMessage) {
-      summary += `Recent topic: ${lastUserMessage}${lastUserMessage.length >= 200 ? '...' : ''}. `;
+      summary += `Recent topic: ${lastUserMessage}. `;
     }
     
     return summary.trim();

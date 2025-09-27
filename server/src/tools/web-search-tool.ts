@@ -175,8 +175,7 @@ export class WebSearchTool extends BaseTool {
         {
           title: `Search Results for: ${input.query}`,
           url: "#search-results",
-          snippet:
-            content.substring(0, 500) + (content.length > 500 ? "..." : ""),
+          snippet: content, // Show full content without truncation
           source: "OpenAI Web Search",
         },
       ];
