@@ -40,6 +40,21 @@ export interface AgentResponse {
   conversationId: string;
   toolsUsed: ToolUsageContext[];
   context: ConversationContext;
+  intentAnalysis?: {
+    currentIntent: string;
+    contextualRelevance: "high" | "medium" | "low";
+    relationshipToHistory: "continuation" | "new_topic" | "clarification" | "recall";
+    keyTopics: string[];
+    needsHistoricalContext: boolean;
+    contextRetrievalStrategy: string;
+    confidenceLevel: "high" | "medium" | "low";
+    confidenceScore: number;
+  };
+  reasoning?: {
+    actionsPerformed: string[];
+    contextUsed: string;
+    decisionProcess: string;
+  };
   metadata: {
     model: string;
     tokensUsed?: number;

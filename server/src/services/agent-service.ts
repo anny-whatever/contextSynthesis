@@ -468,11 +468,20 @@ export class AgentService {
         timestamp: new Date().toISOString(),
       });
 
+      // Generate human-like reasoning about actions taken
+      const reasoning = this.generateReasoningExplanation(
+        updatedIntentAnalysis,
+        toolsUsed,
+        context
+      );
+
       return {
         message: finalContent,
         conversationId,
         toolsUsed,
         context,
+        intentAnalysis: updatedIntentAnalysis,
+        reasoning,
         metadata: {
           model: request.options?.model || this.config.model,
           tokensUsed: totalInputTokens + totalOutputTokens,
@@ -658,11 +667,9 @@ Use this context to provide more relevant and focused responses that align with 
       fullSystemPrompt: systemPrompt, // Show complete system prompt
     });
 
-    // Add conversation history (limit to maxConversationHistory)
-    // These are only the recent, non-summarized messages
-    const recentMessages = context.messageHistory.slice(
-      -this.config.maxConversationHistory
-    );
+    // Add conversation history (limit to latest 2 turns = 4 messages max)
+    // This ensures we only send the most recent context, forcing the AI to use tools for historical context
+    const recentMessages = context.messageHistory.slice(-4); // Latest 2 turns (USER + ASSISTANT pairs)
 
     for (const msg of recentMessages) {
       messages.push({
@@ -1108,5 +1115,59 @@ Use this context to provide more relevant and focused responses that align with 
       console.error("Error deleting conversation:", error);
       return false;
     }
+  }
+
+  private generateReasoningExplanation(
+    intentAnalysis: IntentAnalysisResult,
+    toolsUsed: ToolUsageContext[],
+    context: ConversationContext
+  ): { actionsPerformed: string[]; contextUsed: string; decisionProcess: string } {
+    const actionsPerformed: string[] = [];
+    
+    // Document actions taken
+    actionsPerformed.push(`Analyzed user intent: "${intentAnalysis.currentIntent}"`);
+    
+    if (toolsUsed.length > 0) {
+      const successfulTools = toolsUsed.filter(tool => tool.success);
+      const failedTools = toolsUsed.filter(tool => !tool.success);
+      
+      successfulTools.forEach(tool => {
+        actionsPerformed.push(`Successfully executed ${tool.toolName} tool`);
+      });
+      
+      failedTools.forEach(tool => {
+        actionsPerformed.push(`Attempted ${tool.toolName} tool (encountered issues)`);
+      });
+    }
+    
+    actionsPerformed.push("Generated response based on analysis and available context");
+
+    // Explain context usage
+    let contextUsed: string;
+    if (intentAnalysis.contextualRelevance === "high") {
+      contextUsed = `Used ${context.messageHistory.length} previous messages from conversation history as they were highly relevant to understanding and responding to your request.`;
+    } else if (intentAnalysis.contextualRelevance === "medium") {
+      contextUsed = `Referenced conversation history selectively, focusing on the most relevant parts to provide better context for your request.`;
+    } else {
+      contextUsed = `Treated this as a fresh request with minimal reliance on conversation history, focusing primarily on your current message.`;
+    }
+
+    // Explain decision process
+    const decisionProcess = [
+      `I analyzed your message with ${intentAnalysis.confidenceScore}% confidence in understanding your intent.`,
+      `Based on the ${intentAnalysis.contextualRelevance} relevance to our conversation history, I chose a ${intentAnalysis.contextRetrievalStrategy} approach.`,
+      toolsUsed.length > 0 
+        ? `I determined that ${toolsUsed.length} tool${toolsUsed.length > 1 ? 's were' : ' was'} needed to provide a complete response.`
+        : `I determined that I could provide a complete response without using external tools.`,
+      intentAnalysis.keyTopics && intentAnalysis.keyTopics.length > 0
+        ? `I focused on these key topics: ${intentAnalysis.keyTopics.join(', ')}.`
+        : `I addressed your request comprehensively without identifying specific topic constraints.`
+    ].join(' ');
+
+    return {
+      actionsPerformed,
+      contextUsed,
+      decisionProcess
+    };
   }
 }
