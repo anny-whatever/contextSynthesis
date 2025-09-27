@@ -737,4 +737,91 @@ router.get(
   })
 );
 
+// GET /api/analytics/cumulative-cost - Get cumulative cost over message count
+router.get(
+  "/cumulative-cost",
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { timeframe = "7d" } = req.query;
+
+    const now = new Date();
+    let startDate = new Date();
+
+    switch (timeframe) {
+      case "24h":
+        startDate.setHours(now.getHours() - 24);
+        break;
+      case "7d":
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case "30d":
+        startDate.setDate(now.getDate() - 30);
+        break;
+      case "90d":
+        startDate.setDate(now.getDate() - 90);
+        break;
+      default:
+        startDate.setDate(now.getDate() - 7);
+    }
+
+    // Get all usage data ordered by creation time
+    const usageData = await prisma.usageTracking.findMany({
+      where: {
+        createdAt: {
+          gte: startDate,
+        },
+      },
+      select: {
+        messageId: true,
+        totalCost: true,
+        createdAt: true,
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    // Group by messageId and calculate cumulative cost
+    const messageMap = new Map();
+    let cumulativeCost = 0;
+    let messageCount = 0;
+
+    usageData.forEach((record) => {
+      if (record.messageId && !messageMap.has(record.messageId)) {
+        messageCount++;
+        cumulativeCost += record.totalCost;
+        messageMap.set(record.messageId, {
+          messageCount,
+          cumulativeCost,
+          createdAt: record.createdAt,
+        });
+      } else if (record.messageId && messageMap.has(record.messageId)) {
+        // Update cumulative cost for existing message
+        cumulativeCost += record.totalCost;
+        const existing = messageMap.get(record.messageId);
+        messageMap.set(record.messageId, {
+          ...existing,
+          cumulativeCost,
+        });
+      }
+    });
+
+    const cumulativeData = Array.from(messageMap.values()).map((item, index) => ({
+      messageCount: index + 1,
+      cumulativeCost: item.cumulativeCost,
+      createdAt: item.createdAt,
+    }));
+
+    res.json({
+      success: true,
+      data: {
+        timeframe,
+        cumulativeData,
+        totalMessages: messageCount,
+        totalCost: cumulativeCost,
+      },
+    });
+  })
+);
+
 export default router;

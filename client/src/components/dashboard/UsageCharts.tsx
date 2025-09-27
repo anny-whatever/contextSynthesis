@@ -17,6 +17,8 @@ import {
   ResponsiveContainer,
   ScatterChart,
   Scatter,
+  AreaChart,
+  Area,
 } from "recharts";
 import { AnalyticsApiService } from "@/services/analyticsApi";
 
@@ -186,11 +188,11 @@ export function UsageCharts({ timeframe, detailed = false }: UsageChartsProps) {
     },
     {
       title: "Cost vs Token Usage",
-      description: "Relationship between cost and token usage per message",
-      xDataKey: "totalTokens",
-      yDataKey: "totalCost",
+      description: "Cost progression with area tracing per message",
+      dataKey: "totalCost",
       color: "#3b82f6",
-      type: "scatter" as const,
+      formatter: formatCurrency,
+      type: "area" as const,
     },
   ];
 
@@ -206,15 +208,14 @@ export function UsageCharts({ timeframe, detailed = false }: UsageChartsProps) {
           </CardHeader>
           <CardContent>
             <ResponsiveContainer width="100%" height={300}>
-              {chart.type === "scatter" ? (
-                <ScatterChart data={chartData}>
+              {chart.type === "area" ? (
+                <AreaChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis
-                    dataKey={chart.xDataKey}
-                    tickFormatter={formatNumber}
+                    dataKey="messageIndex"
                     fontSize={12}
                     label={{
-                      value: "Total Tokens",
+                      value: "Message Sequence",
                       position: "insideBottom",
                       offset: -5,
                     }}
@@ -223,18 +224,23 @@ export function UsageCharts({ timeframe, detailed = false }: UsageChartsProps) {
                     tickFormatter={formatCurrency}
                     fontSize={12}
                     label={{
-                      value: "Total Cost ($)",
+                      value: "Cost ($)",
                       angle: -90,
                       position: "insideLeft",
                     }}
                   />
                   <Tooltip content={<CustomTooltip />} />
-                  <Scatter
-                    dataKey={chart.yDataKey}
+                  <Area
+                    type="monotone"
+                    dataKey={chart.dataKey}
+                    stroke={chart.color}
                     fill={chart.color}
-                    fillOpacity={0.6}
+                    fillOpacity={0.3}
+                    strokeWidth={2}
+                    dot={{ fill: chart.color, strokeWidth: 2, r: 4 }}
+                    activeDot={{ r: 6, stroke: chart.color, strokeWidth: 2 }}
                   />
-                </ScatterChart>
+                </AreaChart>
               ) : (
                 <LineChart data={chartData}>
                   <CartesianGrid strokeDasharray="3 3" />

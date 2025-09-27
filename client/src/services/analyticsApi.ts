@@ -72,4 +72,11 @@ export class AnalyticsApiService {
       `/analytics/operation-cost-breakdown?timeframe=${timeframe}`
     );
   }
+
+  // Cumulative cost data
+  static async getCumulativeCost(timeframe: string): Promise<any> {
+    return this.request(
+      `/analytics/cumulative-cost?timeframe=${timeframe}`
+    );
+  }
 }

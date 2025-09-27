@@ -21,6 +21,8 @@ import {
   BarChart,
   Bar,
   Legend,
+  LineChart,
+  Line,
 } from "recharts";
 import { AnalyticsApiService } from "@/services/analyticsApi";
 
@@ -39,6 +41,12 @@ interface TimelineData {
   date: string;
   total: number;
   [key: string]: number | string;
+}
+
+interface CumulativeData {
+  messageCount: number;
+  cumulativeCost: number;
+  createdAt: string;
 }
 
 interface OperationCostChartsProps {
@@ -65,6 +73,7 @@ export function OperationCostCharts({
 }: OperationCostChartsProps) {
   const [breakdown, setBreakdown] = useState<OperationBreakdownData[]>([]);
   const [timeline, setTimeline] = useState<TimelineData[]>([]);
+  const [cumulativeData, setCumulativeData] = useState<CumulativeData[]>([]);
   const [operationTypes, setOperationTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,12 +83,14 @@ export function OperationCostCharts({
       try {
         setLoading(true);
         setError(null);
-        const response = await AnalyticsApiService.getOperationCostBreakdown(
-          timeframe
-        );
-        setBreakdown(response.data.breakdown || []);
-        setTimeline(response.data.timeline || []);
-        setOperationTypes(response.data.operationTypes || []);
+        const [breakdownResponse, cumulativeResponse] = await Promise.all([
+          AnalyticsApiService.getOperationCostBreakdown(timeframe),
+          AnalyticsApiService.getCumulativeCost(timeframe),
+        ]);
+        setBreakdown(breakdownResponse.data.breakdown || []);
+        setTimeline(breakdownResponse.data.timeline || []);
+        setOperationTypes(breakdownResponse.data.operationTypes || []);
+        setCumulativeData(cumulativeResponse.data.cumulativeData || []);
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to fetch data");
       } finally {
@@ -208,9 +219,39 @@ export function OperationCostCharts({
 
   const charts = [
     {
-      title: "Operation Cost Timeline",
-      description: "Cost breakdown by operation type over time",
+      title: "Operation Cost Breakdown",
+      description: "Cost breakdown by operation type",
       component: (
+        <ResponsiveContainer width="100%" height={300}>
+          <BarChart data={breakdown.slice(0, 10)}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis
+              dataKey="displayName"
+              fontSize={12}
+              angle={-45}
+              textAnchor="end"
+              height={80}
+            />
+            <YAxis tickFormatter={formatCurrency} fontSize={12} />
+            <Tooltip
+              formatter={(value: number) => [formatCurrency(value), "Total Cost"]}
+              labelFormatter={(label) => `Operation: ${label}`}
+            />
+            <Bar
+              dataKey="totalCost"
+              fill="#3b82f6"
+              name="Total Cost"
+            />
+          </BarChart>
+        </ResponsiveContainer>
+      ),
+    },
+    {
+      title: detailed ? "Operation Cost Timeline" : "Cumulative Cost Growth",
+      description: detailed 
+        ? "Cost breakdown by operation type over time" 
+        : "Total spending growth over message count",
+      component: detailed ? (
         <ResponsiveContainer width="100%" height={300}>
           <AreaChart data={timeline}>
             <CartesianGrid strokeDasharray="3 3" />
@@ -229,6 +270,42 @@ export function OperationCostCharts({
               />
             ))}
           </AreaChart>
+        </ResponsiveContainer>
+      ) : (
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={cumulativeData}>
+            <CartesianGrid strokeDasharray="3 3" />
+            <XAxis 
+              dataKey="messageCount" 
+              fontSize={12}
+              label={{
+                value: "Message Count",
+                position: "insideBottom",
+                offset: -5,
+              }}
+            />
+            <YAxis 
+              tickFormatter={formatCurrency} 
+              fontSize={12}
+              label={{
+                value: "Cumulative Cost ($)",
+                angle: -90,
+                position: "insideLeft",
+              }}
+            />
+            <Tooltip 
+              formatter={(value: number) => [formatCurrency(value), "Cumulative Cost"]}
+              labelFormatter={(label) => `Message #${label}`}
+            />
+            <Line
+              type="monotone"
+              dataKey="cumulativeCost"
+              stroke="#10b981"
+              strokeWidth={3}
+              dot={{ fill: "#10b981", strokeWidth: 2, r: 4 }}
+              activeDot={{ r: 6, stroke: "#10b981", strokeWidth: 2 }}
+            />
+          </LineChart>
         </ResponsiveContainer>
       ),
     },
