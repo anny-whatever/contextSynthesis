@@ -1,6 +1,7 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, UsageOperationType } from "@prisma/client";
 import OpenAI from "openai";
 import { SmartContextResult } from "./smart-context-service";
+import { UsageTrackingService } from "./usage-tracking-service";
 
 export interface IntentAnalysisResult {
   currentIntent: string;
@@ -60,20 +61,23 @@ export interface ConversationContext {
 export class IntentAnalysisService {
   private prisma: PrismaClient;
   private openai: OpenAI;
+  private usageTrackingService: UsageTrackingService;
 
   constructor(prisma: PrismaClient, openai: OpenAI) {
     this.prisma = prisma;
     this.openai = openai;
+    this.usageTrackingService = new UsageTrackingService(prisma);
   }
 
   async analyzeIntent(
     conversationId: string,
     userMessageId: string,
-    currentPrompt: string
+    currentPrompt: string,
+    userId?: string
   ): Promise<IntentAnalysisResult> {
     // Stage 1: Load minimal context and determine strategy
     const minimalContext = await this.loadMinimalContext(conversationId);
-    const initialAnalysis = await this.performIntentAnalysis(minimalContext, currentPrompt);
+    const initialAnalysis = await this.performIntentAnalysis(minimalContext, currentPrompt, conversationId, userMessageId, userId);
 
     // Stage 2: Load appropriate context based on strategy
     let finalContext: ConversationContext;
@@ -91,7 +95,7 @@ export class IntentAnalysisService {
     // Stage 3: Perform final analysis with appropriate context (if different from initial)
     let finalAnalysis: IntentAnalysisResult;
     if (finalContext !== minimalContext) {
-      finalAnalysis = await this.performIntentAnalysis(finalContext, currentPrompt);
+      finalAnalysis = await this.performIntentAnalysis(finalContext, currentPrompt, conversationId, userMessageId, userId);
     } else {
       finalAnalysis = initialAnalysis;
     }
@@ -224,7 +228,10 @@ export class IntentAnalysisService {
 
   private async performIntentAnalysis(
     context: ConversationContext,
-    currentPrompt: string
+    currentPrompt: string,
+    conversationId: string,
+    userMessageId: string,
+    userId?: string
   ): Promise<IntentAnalysisResult> {
     // Build context for OpenAI
     const contextText = this.buildContextText(context);
@@ -334,6 +341,7 @@ GUIDELINES:
 - Keep compressed context under 200 words but preserve essential information
 - Extract pending questions that still need follow-up`;
 
+    const startTime = Date.now();
     try {
       const response = await this.openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -454,6 +462,35 @@ GUIDELINES:
 
       // With structured output, this is guaranteed to be valid JSON
       const analysis = JSON.parse(analysisText);
+      
+      // Track usage for intent analysis
+      const duration = Date.now() - startTime;
+      const inputTokens = response.usage?.prompt_tokens || 0;
+      const outputTokens = response.usage?.completion_tokens || 0;
+      
+      const usageData: any = {
+        conversationId,
+        messageId: userMessageId,
+        operationType: UsageOperationType.INTENT_ANALYSIS,
+        operationSubtype: "intent_analysis",
+        model: "gpt-4o-mini",
+        inputTokens,
+        outputTokens,
+        duration,
+        success: true,
+        metadata: {
+          contextRetrievalStrategy: analysis.contextRetrievalStrategy,
+          needsHistoricalContext: analysis.needsHistoricalContext,
+          keyTopicsCount: analysis.keyTopics?.length || 0,
+          confidenceLevel: "pending" // Will be calculated later
+        }
+      };
+      
+      if (userId) {
+        usageData.userId = userId;
+      }
+      
+      await this.usageTrackingService.trackUsage(usageData);
 
       // Debug logging for date-based queries
       if (analysis.contextRetrievalStrategy === "date_based_search") {
@@ -489,6 +526,30 @@ GUIDELINES:
       };
     } catch (error) {
       console.error("Intent analysis failed:", error);
+      
+      // Track failed usage
+      const duration = Date.now() - startTime;
+      const usageData: any = {
+        conversationId,
+        messageId: userMessageId,
+        operationType: UsageOperationType.INTENT_ANALYSIS,
+        operationSubtype: "intent_analysis",
+        model: "gpt-4o-mini",
+        inputTokens: 0,
+        outputTokens: 0,
+        duration,
+        success: false,
+        metadata: {
+          error: error instanceof Error ? error.message : "Unknown error",
+          fallbackUsed: true
+        }
+      };
+      
+      if (userId) {
+        usageData.userId = userId;
+      }
+      
+      await this.usageTrackingService.trackUsage(usageData);
 
       // Fallback analysis with low confidence
       return {

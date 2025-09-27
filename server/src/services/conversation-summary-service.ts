@@ -45,12 +45,14 @@ export class ConversationSummaryService {
   constructor(prisma: PrismaClient, openai: OpenAI, topicEmbeddingService?: TopicEmbeddingService) {
     this.prisma = prisma;
     this.openai = openai;
-    this.topicExtractionService = new TopicExtractionService();
+    this.topicExtractionService = new TopicExtractionService(prisma);
     this.topicEmbeddingService = topicEmbeddingService || new TopicEmbeddingService(openai, prisma);
   }
 
   async checkAndCreateSummary(
-    conversationId: string
+    conversationId: string,
+    userMessageId?: string,
+    userId?: string
   ): Promise<SummaryBatchResult | null> {
     // Count user messages since last summary batch
     const lastSummaryBatch = await this.getLatestSummaryBatch(conversationId);
@@ -96,7 +98,9 @@ export class ConversationSummaryService {
       );
       return await this.createTopicBasedSummaries(
         conversationId,
-        userMessagesSinceLastSummary
+        userMessagesSinceLastSummary,
+        userMessageId,
+        userId
       );
     }
 
@@ -188,7 +192,9 @@ export class ConversationSummaryService {
 
   private async createTopicBasedSummaries(
     conversationId: string,
-    userMessages: MessageForSummary[]
+    userMessages: MessageForSummary[],
+    userMessageId?: string,
+    userId?: string
   ): Promise<SummaryBatchResult> {
     // Get all messages (user + assistant) in the range for topic extraction
     if (userMessages.length === 0) {
@@ -232,7 +238,12 @@ export class ConversationSummaryService {
 
     // Extract granular topics from the conversation
     const topicExtractionResult =
-      await this.topicExtractionService.extractGranularTopics(allMessages);
+      await this.topicExtractionService.extractGranularTopics(
+        allMessages,
+        conversationId,
+        userMessageId,
+        userId
+      );
 
     // Debug: Check topic extraction result
     console.log("🔍 [DEBUG] Topic extraction result:", {

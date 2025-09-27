@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { PrismaClient, Role } from "@prisma/client";
+import { PrismaClient, Role, UsageOperationType } from "@prisma/client";
 import { ToolRegistry } from "../tools/tool-registry";
 import { CostService, TokenUsage, WebSearchUsage } from "./cost-service";
 import {
@@ -11,6 +11,7 @@ import {
   SummaryBatchResult,
 } from "./conversation-summary-service";
 import { SmartContextService } from "./smart-context-service";
+import { UsageTrackingService } from "./usage-tracking-service";
 import {
   AgentConfig,
   AgentRequest,
@@ -27,6 +28,7 @@ export class AgentService {
   private intentAnalysisService: IntentAnalysisService;
   private conversationSummaryService: ConversationSummaryService;
   private smartContextService: SmartContextService;
+  private usageTrackingService: UsageTrackingService;
   private config: AgentConfig;
 
   constructor(
@@ -52,6 +54,7 @@ export class AgentService {
       this.prisma,
       this.openai
     );
+    this.usageTrackingService = new UsageTrackingService(this.prisma);
 
     // Initialize SmartContextService with both semantic and date-based search tools
     const semanticSearchTool = this.toolRegistry.getTool(
@@ -142,10 +145,27 @@ export class AgentService {
       options: request.options,
     });
 
-    // Only create a new conversation if no conversationId is provided
+    // Create a new conversation if no conversationId is provided
     if (!conversationId) {
       conversationId = await this.createNewConversation(request.userId);
       console.log("📝 [AGENT] Created new conversation:", { conversationId });
+    } else {
+      // Check if the provided conversation exists, create it if it doesn't
+      const existingConversation = await this.prisma.conversation.findUnique({
+        where: { id: conversationId },
+      });
+      
+      if (!existingConversation) {
+        console.log("📝 [AGENT] Conversation not found, creating:", { conversationId });
+        await this.prisma.conversation.create({
+          data: {
+            id: conversationId,
+            title: "New Conversation",
+            userId: request.userId || "anonymous",
+          },
+        });
+        console.log("📝 [AGENT] Created conversation with provided ID:", { conversationId });
+      }
     }
 
     try {
@@ -183,7 +203,8 @@ export class AgentService {
       const intentAnalysis = await this.intentAnalysisService.analyzeIntent(
         conversationId,
         savedUserMessage.id,
-        request.message
+        request.message,
+        request.userId
       );
 
       console.log("🧠 [AGENT] Intent analysis completed:", {
@@ -260,9 +281,11 @@ export class AgentService {
         timestamp: new Date().toISOString(),
       });
 
+      const completionStartTime = Date.now();
       const completion = await this.openai.chat.completions.create(
         completionParams
       );
+      const completionDuration = Date.now() - completionStartTime;
 
       console.log("✅ [AGENT] OpenAI API response received:", {
         model: completion.model,
@@ -271,6 +294,25 @@ export class AgentService {
         hasToolCalls: !!completion.choices[0]?.message?.tool_calls?.length,
         responseLength: completion.choices[0]?.message?.content?.length || 0,
       });
+
+      // Track usage for main completion
+      const usageData: any = {
+        conversationId,
+        messageId: savedUserMessage.id,
+        operationType: UsageOperationType.AGENT_COMPLETION,
+        operationSubtype: "main_completion",
+        model: completion.model || model,
+        inputTokens: completion.usage?.prompt_tokens || 0,
+        outputTokens: completion.usage?.completion_tokens || 0,
+        duration: completionDuration,
+        success: true,
+        metadata: {
+          finishReason: completion.choices[0]?.finish_reason,
+          hasToolCalls: !!completion.choices[0]?.message?.tool_calls?.length,
+        },
+      };
+      if (request.userId) usageData.userId = request.userId;
+      await this.usageTrackingService.trackUsage(usageData);
 
       const assistantMessage = completion.choices[0]?.message;
       if (!assistantMessage) {
@@ -343,9 +385,11 @@ export class AgentService {
 
         // Only add temperature for models that support it (exclude o1 and some other models)
 
+        const followUpStartTime = Date.now();
         followUpCompletion = await this.openai.chat.completions.create(
           followUpParams
         );
+        const followUpDuration = Date.now() - followUpStartTime;
 
         console.log("✅ [AGENT] Follow-up API response received:", {
           usage: followUpCompletion.usage,
@@ -353,6 +397,26 @@ export class AgentService {
           responseLength:
             followUpCompletion.choices[0]?.message?.content?.length || 0,
         });
+
+        // Track usage for follow-up completion
+        const followUpUsageData: any = {
+          conversationId,
+          messageId: savedUserMessage.id,
+          operationType: UsageOperationType.AGENT_COMPLETION,
+          operationSubtype: "tool_followup_completion",
+          model: followUpCompletion.model || model,
+          inputTokens: followUpCompletion.usage?.prompt_tokens || 0,
+          outputTokens: followUpCompletion.usage?.completion_tokens || 0,
+          duration: followUpDuration,
+          success: true,
+          metadata: {
+            finishReason: followUpCompletion.choices[0]?.finish_reason,
+            toolCount: toolResults.length,
+            successfulTools: toolResults.filter((r) => r.success).length,
+          },
+        };
+        if (request.userId) followUpUsageData.userId = request.userId;
+        await this.usageTrackingService.trackUsage(followUpUsageData);
 
         finalContent =
           followUpCompletion.choices[0]?.message?.content || finalContent;
@@ -503,7 +567,10 @@ export class AgentService {
   }
 
   private async executeToolCalls(
-    toolCalls: any[]
+    toolCalls: any[],
+    conversationId?: string,
+    messageId?: string,
+    userId?: string
   ): Promise<ToolUsageContext[]> {
     const results: ToolUsageContext[] = [];
 
@@ -515,24 +582,77 @@ export class AgentService {
         const toolInput = JSON.parse(toolCall.function.arguments);
 
         const result = await this.toolRegistry.executeTool(toolName, toolInput);
+        const duration = Date.now() - startTime;
 
         results.push({
           toolName,
           input: toolInput,
           output: result.success ? result : { error: result.error },
           success: result.success,
-          duration: Date.now() - startTime,
+          duration,
           ...(result.success ? {} : { error: result.error }),
         });
+
+        // Track tool usage
+        if (conversationId && messageId) {
+          const toolUsageData: any = {
+            conversationId,
+            messageId,
+            operationType: UsageOperationType.TOOL_CALL,
+            operationSubtype: toolName,
+            model: "tool", // Tools don't use AI models
+            inputTokens: 0,
+            outputTokens: 0,
+            duration,
+            success: result.success,
+            metadata: {
+              toolName,
+              inputSize: JSON.stringify(toolInput).length,
+              outputSize: JSON.stringify(result).length,
+              ...(result.success ? {} : { error: result.error }),
+            },
+          };
+          if (userId) toolUsageData.userId = userId;
+          if (!result.success) toolUsageData.errorMessage = result.error;
+
+          await this.usageTrackingService.trackUsage(toolUsageData);
+        }
       } catch (error) {
+        const duration = Date.now() - startTime;
+        const errorMessage = error instanceof Error ? error.message : "Unknown error";
+
         results.push({
           toolName: toolCall.function.name,
           input: toolCall.function.arguments,
           output: null,
           success: false,
-          duration: Date.now() - startTime,
-          error: error instanceof Error ? error.message : "Unknown error",
+          duration,
+          error: errorMessage,
         });
+
+        // Track failed tool usage
+        if (conversationId && messageId) {
+          const toolUsageData: any = {
+            conversationId,
+            messageId,
+            operationType: UsageOperationType.TOOL_CALL,
+            operationSubtype: toolCall.function.name,
+            model: "tool",
+            inputTokens: 0,
+            outputTokens: 0,
+            duration,
+            success: false,
+            errorMessage,
+            metadata: {
+              toolName: toolCall.function.name,
+              inputSize: toolCall.function.arguments?.length || 0,
+              error: errorMessage,
+            },
+          };
+          if (userId) toolUsageData.userId = userId;
+
+          await this.usageTrackingService.trackUsage(toolUsageData);
+        }
       }
     }
 
@@ -1087,6 +1207,18 @@ Use this context to provide more relevant and focused responses that align with 
           where: { id: context.conversationId! },
           data: { updatedAt: new Date() },
         });
+      }
+
+      // Check and create summaries if needed
+      try {
+        await this.conversationSummaryService.checkAndCreateSummary(
+          context.conversationId!,
+          savedUserMessageId,
+          context.userId
+        );
+      } catch (summaryError) {
+        console.error("Error creating conversation summary:", summaryError);
+        // Don't throw here to avoid breaking the response flow
       }
     } catch (error) {
       console.error("Error persisting conversation:", error);

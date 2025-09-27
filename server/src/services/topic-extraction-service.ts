@@ -1,5 +1,6 @@
 import { OpenAI } from 'openai';
-import { Message } from '@prisma/client';
+import { Message, PrismaClient, UsageOperationType } from '@prisma/client';
+import { UsageTrackingService } from './usage-tracking-service';
 
 export interface ExtractedTopic {
   topicName: string;
@@ -17,14 +18,23 @@ export interface TopicExtractionResult {
 
 export class TopicExtractionService {
   private openai: OpenAI;
+  private usageTrackingService?: UsageTrackingService;
 
-  constructor() {
+  constructor(prisma?: PrismaClient) {
     this.openai = new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
     });
+    if (prisma) {
+      this.usageTrackingService = new UsageTrackingService(prisma);
+    }
   }
 
-  async extractGranularTopics(messages: Message[]): Promise<TopicExtractionResult> {
+  async extractGranularTopics(
+    messages: Message[], 
+    conversationId?: string, 
+    userMessageId?: string, 
+    userId?: string
+  ): Promise<TopicExtractionResult> {
     const batchId = `batch_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
     // Prepare conversation text for analysis
@@ -79,6 +89,8 @@ CRITICAL: For each topic's summary, you MUST include ALL specific details mentio
 
 Do NOT create brief summaries. Create comprehensive, detailed summaries that preserve all the important information discussed for each topic.`;
 
+    const startTime = Date.now();
+    
     try {
       const response = await this.openai.chat.completions.create({
         model: 'gpt-4o',
@@ -96,6 +108,28 @@ Do NOT create brief summaries. Create comprehensive, detailed summaries that pre
         throw new Error('No content received from OpenAI');
       }
       const result = JSON.parse(content);
+
+      // Track usage for successful topic extraction
+      if (this.usageTrackingService && conversationId && userMessageId) {
+        const duration = Date.now() - startTime;
+        await this.usageTrackingService.trackUsage({
+          conversationId,
+          messageId: userMessageId,
+          operationType: UsageOperationType.TOPIC_EXTRACTION,
+          model: 'gpt-4o',
+          duration,
+          success: true,
+          inputTokens: response.usage?.prompt_tokens || 0,
+          outputTokens: response.usage?.completion_tokens || 0,
+          metadata: {
+            messageCount: messages.length,
+            topicsExtracted: result.topics?.length || 0,
+            batchId,
+            totalTokens: response.usage?.total_tokens
+          },
+          ...(userId && { userId })
+        });
+      }
       
       // Validate and clean the result
       const topics: ExtractedTopic[] = (result.topics || [])
@@ -116,6 +150,27 @@ Do NOT create brief summaries. Create comprehensive, detailed summaries that pre
 
     } catch (error) {
       console.error('Error extracting topics:', error);
+      
+      // Track usage for failed topic extraction
+      if (this.usageTrackingService && conversationId && userMessageId) {
+        const duration = Date.now() - startTime;
+        await this.usageTrackingService.trackUsage({
+          conversationId,
+          messageId: userMessageId,
+          operationType: UsageOperationType.TOPIC_EXTRACTION,
+          model: 'gpt-4o',
+          duration,
+          success: false,
+          inputTokens: 0,
+          outputTokens: 0,
+          metadata: {
+            messageCount: messages.length,
+            error: error instanceof Error ? error.message : 'Unknown error',
+            batchId
+          },
+          ...(userId && { userId })
+        });
+      }
       
       // Fallback: create a single generic topic with detailed summary
       const fallbackSummary = this.createDetailedFallbackSummary(messages);
