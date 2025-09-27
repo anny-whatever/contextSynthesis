@@ -587,12 +587,10 @@ Use this context to provide more relevant and focused responses that align with 
       const conversation = await this.prisma.conversation.findUnique({
         where: { id: conversationId },
         include: {
-          // Only load messages that don't have a summaryId (i.e., recent unsummarized messages)
+          // Always get the last 6 messages (3 turns) regardless of summary status
           messages: {
-            where: {
-              summaryId: null, // Only get messages that haven't been summarized
-            },
-            orderBy: { createdAt: "asc" },
+            orderBy: { createdAt: "desc" },
+            take: 6, // Last 3 turns (USER + ASSISTANT pairs)
             include: {
               toolUsages: true,
             },
@@ -612,9 +610,10 @@ Use this context to provide more relevant and focused responses that align with 
         };
       }
 
-      // Transform only the non-summarized messages
-      const messageHistory: MessageContext[] = conversation.messages.map(
-        (msg) => ({
+      // Transform the last 3 turns of messages (reverse order since we got them desc)
+      const messageHistory: MessageContext[] = conversation.messages
+        .reverse() // Reverse to get chronological order (oldest first)
+        .map((msg) => ({
           id: msg.id,
           role: msg.role,
           content: msg.content,
@@ -628,8 +627,7 @@ Use this context to provide more relevant and focused responses that align with 
             error: usage.error || undefined,
           })),
           isSummary: false,
-        })
-      );
+        }));
 
       // Use smart context retrieval based on intent analysis
       const smartContextResult = await this.smartContextService.retrieveContext(
@@ -673,12 +671,10 @@ Use this context to provide more relevant and focused responses that align with 
       const conversation = await this.prisma.conversation.findUnique({
         where: { id: conversationId },
         include: {
-          // Only load messages that don't have a summaryId (i.e., recent unsummarized messages)
+          // Always get the last 6 messages (3 turns) regardless of summary status
           messages: {
-            where: {
-              summaryId: null, // Only get messages that haven't been summarized
-            },
-            orderBy: { createdAt: "asc" },
+            orderBy: { createdAt: "desc" },
+            take: 6, // Last 3 turns (USER + ASSISTANT pairs)
             include: {
               toolUsages: true,
             },
@@ -717,12 +713,13 @@ Use this context to provide more relevant and focused responses that align with 
         };
       }
 
-      // Transform only the non-summarized messages
-      const messageHistory: MessageContext[] = conversation.messages.map(
-        (msg) => ({
+      // Transform the last 3 turns of messages (reverse order since we got them desc)
+      const messageHistory: MessageContext[] = conversation.messages
+        .reverse() // Reverse to get chronological order (oldest first)
+        .map((msg) => ({
           id: msg.id,
           role: msg.role,
-          content: msg.content, // Use actual content since these are not summarized
+          content: msg.content,
           timestamp: msg.createdAt,
           toolUsages: msg.toolUsages.map((usage) => ({
             toolName: usage.toolName,
@@ -732,9 +729,8 @@ Use this context to provide more relevant and focused responses that align with 
             duration: usage.duration || 0,
             error: usage.error || undefined,
           })),
-          isSummary: false, // These are never summaries since we filtered them out
-        })
-      );
+          isSummary: false,
+        }));
 
       // Add summaries to metadata for use in system prompt
       const summaries = conversationSummaries.map((summary: any) => ({
@@ -752,7 +748,7 @@ Use this context to provide more relevant and focused responses that align with 
       console.log(`📚 [CONTEXT] Loaded conversation context:`, {
         conversationId,
         summariesCount: summaries.length,
-        recentMessagesCount: messageHistory.length,
+        last3TurnsMessagesCount: messageHistory.length,
         totalContextReduction: summaries.reduce((acc: number, s: any) => acc + (s.messageRange as any)?.messageCount || 0, 0),
       });
 
