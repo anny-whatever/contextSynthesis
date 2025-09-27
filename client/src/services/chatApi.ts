@@ -1,4 +1,4 @@
-import type { ChatRequest, ChatResponse, Conversation, Message, Summary, IntentAnalysis } from '../types/chat';
+import type { ChatRequest, ChatResponse, Conversation, Message, Summary, IntentAnalysis, TokenData } from '../types/chat';
 
 const API_BASE_URL = 'http://localhost:3001/api';
 
@@ -104,6 +104,14 @@ export class ChatApiService {
   ): Promise<{ success: boolean; data: { summaries: Summary[]; total: number } }> {
     return this.request<{ success: boolean; data: { summaries: Summary[]; total: number } }>(
       `/chat/conversations/${conversationId}/summaries?limit=${limit}`
+    );
+  }
+
+  static async getConversationTokens(
+    conversationId: string
+  ): Promise<{ success: boolean; data: TokenData }> {
+    return this.request<{ success: boolean; data: TokenData }>(
+      `/chat/conversations/${conversationId}/tokens`
     );
   }
 }

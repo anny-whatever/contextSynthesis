@@ -1,29 +1,18 @@
 import { useState, useEffect } from "react";
 import { Button } from "../ui/button";
-import { RefreshCw, DollarSign } from "lucide-react";
+import { RefreshCw, MessageSquare } from "lucide-react";
 import { ChatApiService } from "../../services/chatApi";
-import type { Conversation } from "../../types/chat";
+import type { Conversation, TokenData } from "../../types/chat";
 
-interface CostCounterProps {
+interface TokenCounterProps {
   conversation?: Conversation | null;
   onRefresh?: () => void;
 }
 
-interface CostData {
-  totalInputTokens: number;
-  totalOutputTokens: number;
-  totalCost: number;
-  totalTokens: number;
-}
-
-export function CostCounter({ conversation, onRefresh }: CostCounterProps) {
-  const [costData, setCostData] = useState<CostData>({
-    totalInputTokens: 0,
-    totalOutputTokens: 0,
-    totalCost: 0,
-    totalTokens: 0,
-  });
+export function TokenCounter({ conversation, onRefresh }: TokenCounterProps) {
+  const [tokenData, setTokenData] = useState<TokenData | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const formatTokens = (tokens: number): string => {
     if (tokens >= 1000000) {
@@ -35,63 +24,81 @@ export function CostCounter({ conversation, onRefresh }: CostCounterProps) {
     return tokens.toString();
   };
 
-  const refreshCostData = async () => {
+  const refreshTokenData = async () => {
     if (!conversation?.id) return;
 
     setIsRefreshing(true);
+    setError(null);
     try {
-      const response = await ChatApiService.getConversation(conversation.id);
+      const response = await ChatApiService.getConversationTokens(conversation.id);
       if (response.success && response.data) {
-        const conv = response.data;
-        setCostData({
-          totalInputTokens: conv.totalInputTokens || 0,
-          totalOutputTokens: conv.totalOutputTokens || 0,
-          totalCost: conv.totalCost || 0,
-          totalTokens:
-            (conv.totalInputTokens || 0) + (conv.totalOutputTokens || 0),
-        });
+        setTokenData(response.data);
       }
       onRefresh?.();
     } catch (error) {
-      console.error("Failed to refresh cost data:", error);
+      console.error("Failed to refresh token data:", error);
+      setError("Failed to load token data");
     } finally {
       setIsRefreshing(false);
     }
   };
 
   useEffect(() => {
-    if (conversation) {
-      setCostData({
-        totalInputTokens: conversation.totalInputTokens || 0,
-        totalOutputTokens: conversation.totalOutputTokens || 0,
-        totalCost: conversation.totalCost || 0,
-        totalTokens:
-          (conversation.totalInputTokens || 0) +
-          (conversation.totalOutputTokens || 0),
-      });
+    if (conversation?.id) {
+      refreshTokenData();
     }
-  }, [conversation]);
+  }, [conversation?.id]);
 
   if (!conversation) {
     return null;
   }
 
+  if (error) {
+    return (
+      <div className="flex gap-2 items-center text-xs text-red-500">
+        <MessageSquare className="h-3 w-3" />
+        <span>{error}</span>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={refreshTokenData}
+          disabled={isRefreshing}
+          className="p-0 w-5 h-5 opacity-60 hover:opacity-100"
+        >
+          <RefreshCw
+            className={`h-3 w-3 ${isRefreshing ? "animate-spin" : ""}`}
+          />
+        </Button>
+      </div>
+    );
+  }
+
+  if (!tokenData) {
+    return (
+      <div className="flex gap-2 items-center text-xs text-muted-foreground">
+        <MessageSquare className="h-3 w-3" />
+        <span>Loading tokens...</span>
+      </div>
+    );
+  }
+
   return (
     <div className="flex gap-3 items-center text-xs text-muted-foreground">
       <div className="flex gap-1 items-center">
-        <span className="font-mono">${costData.totalCost}</span>
+        <MessageSquare className="h-3 w-3" />
+        <span className="font-mono">{formatTokens(tokenData.totalTokens)} tokens</span>
       </div>
       <div className="flex gap-2 items-center">
-        <span>Tokens: {formatTokens(costData.totalTokens)}</span>
+        <span>{tokenData.messageCount} messages</span>
         <span className="text-muted-foreground/60">
-          ({formatTokens(costData.totalInputTokens)}↑{" "}
-          {formatTokens(costData.totalOutputTokens)}↓)
+          (User: {formatTokens(tokenData.breakdown.userTokens)} | 
+          Assistant: {formatTokens(tokenData.breakdown.assistantTokens)})
         </span>
       </div>
       <Button
         variant="ghost"
         size="sm"
-        onClick={refreshCostData}
+        onClick={refreshTokenData}
         disabled={isRefreshing}
         className="p-0 w-5 h-5 opacity-60 hover:opacity-100"
       >

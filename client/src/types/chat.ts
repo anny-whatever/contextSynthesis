@@ -90,3 +90,15 @@ export interface IntentAnalysis {
     createdAt: Date;
   };
 }
+
+export interface TokenData {
+  conversationId: string;
+  totalTokens: number;
+  messageCount: number;
+  breakdown: {
+    userTokens: number;
+    assistantTokens: number;
+    systemTokens: number;
+    toolTokens: number;
+  };
+}

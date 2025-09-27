@@ -15,7 +15,7 @@ import { AlertCircle, Plus, MessageSquare, Trash2, BarChart3 } from "lucide-reac
 import { Link } from "react-router-dom";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
-import { CostCounter } from "./CostCounter";
+import { TokenCounter } from "./CostCounter";
 import { ContextSidebar } from "./ContextSidebar";
 import { ChatApiService } from "../../services/chatApi";
 import { usePingMechanism } from "../../hooks/usePingMechanism";
@@ -291,7 +291,7 @@ export function ChatContainer() {
         {/* Cost Counter */}
         {conversation && (
           <div className="flex justify-center">
-            <CostCounter conversation={conversation} />
+            <TokenCounter conversation={conversation} />
           </div>
         )}
       </div>

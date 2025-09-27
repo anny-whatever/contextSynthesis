@@ -38,6 +38,7 @@
     "express": "^4.21.2",
     "express-rate-limit": "^7.4.1",
     "express-validator": "^7.2.0",
+    "gpt-tokenizer": "^3.0.1",
     "helmet": "^8.0.0",
     "morgan": "^1.10.0",
     "openai": "^5.23.0",

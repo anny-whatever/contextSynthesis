@@ -9,6 +9,7 @@ import {
 } from "../middleware/validation";
 import { asyncHandler } from "../middleware/error-handler";
 import { AgentService } from "../services/agent-service";
+import { encode } from "gpt-tokenizer";
 
 const router = Router();
 const prisma = new PrismaClient();
@@ -403,6 +404,89 @@ router.get(
           offset: Number(offset),
           hasMore: Number(offset) + intentAnalyses.length < totalCount,
         },
+      },
+    });
+  })
+);
+
+// GET /api/chat/conversations/:id/tokens - Get total token count for conversation
+router.get(
+  "/conversations/:id/tokens",
+  apiLimiter,
+  validateConversationId,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id: conversationId } = req.params;
+
+    if (!conversationId) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: "Conversation ID is required",
+          statusCode: 400,
+        },
+      });
+    }
+
+    // Get all messages for the conversation
+    const messages = await prisma.message.findMany({
+      where: { conversationId },
+      select: { content: true, role: true },
+      orderBy: { createdAt: "asc" },
+    });
+
+    if (messages.length === 0) {
+      return res.json({
+        success: true,
+        data: {
+          conversationId,
+          totalTokens: 0,
+          messageCount: 0,
+          breakdown: {
+            userTokens: 0,
+            assistantTokens: 0,
+            systemTokens: 0,
+            toolTokens: 0,
+          },
+        },
+      });
+    }
+
+    // Calculate tokens for each message and categorize by role
+    let totalTokens = 0;
+    const breakdown = {
+      userTokens: 0,
+      assistantTokens: 0,
+      systemTokens: 0,
+      toolTokens: 0,
+    };
+
+    for (const message of messages) {
+      const tokens = encode(message.content).length;
+      totalTokens += tokens;
+
+      switch (message.role) {
+        case "USER":
+          breakdown.userTokens += tokens;
+          break;
+        case "ASSISTANT":
+          breakdown.assistantTokens += tokens;
+          break;
+        case "SYSTEM":
+          breakdown.systemTokens += tokens;
+          break;
+        case "TOOL":
+          breakdown.toolTokens += tokens;
+          break;
+      }
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        conversationId,
+        totalTokens,
+        messageCount: messages.length,
+        breakdown,
       },
     });
   })
