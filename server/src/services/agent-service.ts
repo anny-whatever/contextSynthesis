@@ -98,11 +98,23 @@ export class AgentService {
 - When you're not completely sure about something from our past conversations, ask for clarification rather than assuming
 - If you find related topics when searching your memory but they don't exactly match what the user asked about, suggest them: "I think you might be referring to [topic] that we discussed earlier. Is that what you meant?"
 
-## MEMORY AND CONTEXT
-- You have access to our entire conversation history through semantic search
-- Recent conversations are more easily accessible, but you can recall older topics too
-- When users reference something we talked about before, actively search your memory to find the relevant context
-- If you can't find exactly what they're looking for, look for related topics and ask if that's what they meant
+## MEMORY AND CONTEXT USAGE
+- You have access to our entire conversation history through semantic search tools AND only the last 1 turn of our conversation is immediately available
+- **CRITICAL: ALWAYS USE TOOLS FOR MEMORY SEARCHES**:
+  * **For ANY recall questions**: ALWAYS use semantic_topic_search or date_based_topic_search tools to find information from our conversation history
+  * **For general questions**: Use tools to search for relevant context before answering
+  * **For continuation questions**: While you have the last turn available, still use tools if the user references anything beyond the immediate context
+- **Tool Usage Priority**:
+  * When user asks "what did we discuss about X", "remember when we talked about Y", "tell me about [topic]" → ALWAYS use semantic_topic_search
+  * When user asks about specific dates/times like "yesterday", "last week", "on Monday" → ALWAYS use date_based_topic_search
+  * When user asks general questions that might benefit from historical context → Use semantic_topic_search to find relevant background
+  * Don't rely only on the minimal immediate context - actively search your memory
+- **Context Strategy**:
+  * Immediate context (last 1 turn) is minimal by design to encourage tool usage
+  * Use tools proactively to gather comprehensive context for better responses
+  * Combine tool search results with immediate context for complete understanding
+- When users reference something we talked about before, ALWAYS use tools to search your memory
+- If you can't find exactly what they're looking for with tools, try different search terms or ask for clarification
 
 ## INFORMATION GATHERING
 - You have web search capabilities for current information
@@ -589,7 +601,7 @@ IMPORTANT: Instead of saying "no previous mentions found", acknowledge the relat
 This creates a more natural, human-like conversation flow where you help the user connect to the right topic.`;
     }
 
-    // Enhance system prompt with intent analysis context
+    // Enhance system prompt with intent analysis context and dynamic context usage guidance
     if (intentAnalysis) {
       systemPrompt += `\n\n## CURRENT CONVERSATION CONTEXT
 **User Intent**: ${intentAnalysis.currentIntent}
@@ -607,6 +619,12 @@ ${
     ? `**Last Assistant Question**: ${intentAnalysis.lastAssistantQuestion}`
     : ""
 }
+
+## CONTEXT USAGE GUIDANCE FOR THIS QUERY
+**Strategy**: ${intentAnalysis.contextRetrievalStrategy}
+**Needs Historical Context**: ${intentAnalysis.needsHistoricalContext}
+
+${this.getContextUsageGuidance(intentAnalysis)}
 
 Use this context to provide more relevant and focused responses that align with the user's current intent and conversation flow.`;
     }
@@ -644,27 +662,64 @@ Use this context to provide more relevant and focused responses that align with 
     return messages;
   }
 
+  private getContextUsageGuidance(intentAnalysis: IntentAnalysisResult): string {
+    const strategy = intentAnalysis.contextRetrievalStrategy;
+    const relationshipToHistory = intentAnalysis.relationshipToHistory;
+    
+    switch (strategy) {
+      case "none":
+        return `**Focus**: This appears to be a standalone query. You have minimal immediate context (last 1 turn). Use tools to search for any relevant background if needed.`;
+      
+      case "recent_only":
+        return `**Focus**: This query relates to recent conversation. You have the last 1 turn available, but use tools to search for additional recent context if the user references anything beyond the immediate exchange.`;
+      
+      case "semantic_search":
+        return `**Focus**: This query requires specific historical knowledge. Use the retrieved summaries and historical context from tools as your primary source. The minimal immediate context (last 1 turn) is just for conversational flow.`;
+      
+      case "date_based_search":
+        return `**Focus**: This query is about specific time periods. Use the retrieved historical context from tools as your main source. The immediate context is minimal - rely on the date-based search results.`;
+      
+      case "all_available":
+        return `**Focus**: This query requires comprehensive context. Use all available historical context from tools. Don't rely on the minimal immediate context - the tools provide the comprehensive information needed.`;
+      
+      default:
+        // Fallback based on relationship to history
+        if (relationshipToHistory === "recall") {
+          return `**Focus**: This is a RECALL query - user is asking to remember/recall something from past conversation. ALWAYS use tools to search conversation history. Don't rely on minimal immediate context.`;
+        } else if (relationshipToHistory === "continuation") {
+          return `**Focus**: This appears to be a continuation. You have minimal immediate context (last 1 turn). Use tools to search for relevant context if the user references anything beyond the immediate exchange.`;
+        } else if (relationshipToHistory === "new_topic") {
+          return `**Focus**: This appears to be a new topic. Use tools to search for any relevant background context that might be helpful.`;
+        } else if (relationshipToHistory === "clarification") {
+          return `**Focus**: This appears to be a clarification request. Use tools to search for the context being clarified. Don't rely only on minimal immediate context.`;
+        } else {
+          return `**Focus**: You have minimal immediate context (last 1 turn). Use tools to search for relevant historical context as needed for this query.`;
+        }
+    }
+  }
+
   private async loadSmartConversationContext(
     conversationId: string,
     intentAnalysis: IntentAnalysisResult,
     userId?: string
   ): Promise<ConversationContext> {
     try {
-      // Determine how many recent messages to load based on intent analysis
-      let recentMessageLimit = 6; // Default: last 3 turns
+      // Reduced to 1 turn (2 messages) to force tool usage for better recall
+      // This provides minimal immediate context to encourage using tools for historical context
+      let recentMessageLimit = 2; // Minimum: last 1 turn (reduced from 3 turns)
       
       // Adjust based on context retrieval strategy
       switch (intentAnalysis.contextRetrievalStrategy) {
         case "none":
-          recentMessageLimit = 2; // Just current exchange
+          recentMessageLimit = 2; // Only last 1 turn for immediate context
           break;
         case "recent_only":
-          recentMessageLimit = 6; // Last 3 turns
+          recentMessageLimit = 2; // Last 1 turn
           break;
         case "semantic_search":
         case "date_based_search":
         case "all_available":
-          // For these strategies, we still want recent context but rely more on summaries
+          // For these strategies, we want more recent context plus summaries
           recentMessageLimit = Math.min(10, this.config.maxConversationHistory); // Up to 5 turns or config limit
           break;
       }

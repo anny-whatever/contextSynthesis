@@ -4,7 +4,7 @@ import OpenAI from "openai";
 export interface IntentAnalysisResult {
   currentIntent: string;
   contextualRelevance: "high" | "medium" | "low";
-  relationshipToHistory: "continuation" | "new_topic" | "clarification";
+  relationshipToHistory: "continuation" | "new_topic" | "clarification" | "recall";
   keyTopics: string[];
   pendingQuestions: string[];
   lastAssistantQuestion?: string | undefined;
@@ -248,7 +248,7 @@ RESPONSE FORMAT (JSON):
 {
   "currentIntent": "Detailed, specific description of what the user wants to achieve, including action type, domain/technology, and any specific requirements or constraints",
   "contextualRelevance": "high|medium|low",
-  "relationshipToHistory": "continuation|new_topic|clarification",
+  "relationshipToHistory": "continuation|new_topic|clarification|recall",
   "keyTopics": ["topic1", "topic2", "topic3"],
   "pendingQuestions": ["question1", "question2"],
   "lastAssistantQuestion": "Last question asked by assistant (if any)",
@@ -269,6 +269,12 @@ CONTEXT RETRIEVAL GUIDELINES:
   * "semantic_search": For queries about SPECIFIC TOPICS mentioned in the past, especially when user says "we talked about", "we discussed", "tell me about [specific thing]", or references specific subjects/items/concepts from history
   * "date_based_search": For queries with temporal references like "yesterday", "last week", "on August 5th", "what did we discuss last Monday", "topics from last 5 days", or any date-specific requests
   * "all_available": For complex queries needing comprehensive context across entire conversation
+
+RELATIONSHIP TO HISTORY GUIDELINES:
+- "continuation": User is continuing a previous topic or building on recent discussion
+- "new_topic": User is starting a completely new topic unrelated to recent conversation
+- "clarification": User is asking for clarification about something recently discussed
+- "recall": User is asking to recall or remember something from past conversation that requires searching through history (ALWAYS use semantic_search or date_based_search strategy with this)
 - semanticSearchQueries: Generate 1-3 specific search terms if using semantic_search strategy, empty array otherwise
 - dateQuery: Extract the temporal reference if using date_based_search strategy (e.g., "yesterday", "last 5 days", "2025-08-05", "last week")
 - includeHours: Set to true if the query requires hour-level granularity (e.g., "this morning", "this afternoon", "at 3pm yesterday")
@@ -351,7 +357,7 @@ GUIDELINES:
                 },
                 relationshipToHistory: {
                   type: "string",
-                  enum: ["continuation", "new_topic", "clarification"],
+                  enum: ["continuation", "new_topic", "clarification", "recall"],
                   description:
                     "How the current prompt relates to previous conversation",
                 },
