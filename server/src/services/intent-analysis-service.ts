@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import OpenAI from "openai";
+import { SmartContextResult } from "./smart-context-service";
 
 export interface IntentAnalysisResult {
   currentIntent: string;
@@ -21,6 +22,15 @@ export interface IntentAnalysisResult {
   maxContextItems?: number;
   dateQuery?: string;
   includeHours?: boolean;
+  // New confidence scoring fields
+  confidenceLevel: "high" | "medium" | "low";
+  confidenceScore: number; // 0-1 scale
+  confidenceFactors: {
+    searchResultQuality?: number; // 0-1 scale based on similarity scores
+    contextAvailability?: number; // 0-1 scale based on amount of relevant context
+    querySpecificity?: number; // 0-1 scale based on how specific the query is
+    historicalMatch?: number; // 0-1 scale based on how well historical data matches
+  };
 }
 
 export interface ConversationContext {
@@ -455,6 +465,9 @@ GUIDELINES:
         });
       }
 
+      // Calculate confidence based on analysis results
+      const confidence = this.calculateConfidence(analysis, currentPrompt, context);
+
       return {
         currentIntent: analysis.currentIntent,
         contextualRelevance: analysis.contextualRelevance,
@@ -470,11 +483,14 @@ GUIDELINES:
         maxContextItems: analysis.maxContextItems,
         dateQuery: analysis.dateQuery,
         includeHours: analysis.includeHours,
+        confidenceLevel: confidence.level,
+        confidenceScore: confidence.score,
+        confidenceFactors: confidence.factors,
       };
     } catch (error) {
       console.error("Intent analysis failed:", error);
 
-      // Fallback analysis
+      // Fallback analysis with low confidence
       return {
         currentIntent: "User query requiring assistance",
         contextualRelevance: "medium",
@@ -489,6 +505,14 @@ GUIDELINES:
         contextRetrievalStrategy: "recent_only",
         semanticSearchQueries: [],
         maxContextItems: 5,
+        confidenceLevel: "low",
+        confidenceScore: 0.2,
+        confidenceFactors: {
+          searchResultQuality: 0.0,
+          contextAvailability: 0.0,
+          querySpecificity: 0.0,
+          historicalMatch: 0.0,
+        },
       };
     }
   }
@@ -590,6 +614,185 @@ GUIDELINES:
       contextRetrievalStrategy: "recent_only", // Default strategy
       semanticSearchQueries: [], // Default empty array
       maxContextItems: 5, // Default value
+      confidenceLevel: "medium", // Default for stored analysis
+      confidenceScore: 0.5, // Default neutral score
+      confidenceFactors: {
+        searchResultQuality: 0.5,
+        contextAvailability: 0.5,
+        querySpecificity: 0.5,
+        historicalMatch: 0.5,
+      },
     };
+  }
+
+  private calculateConfidence(
+    analysis: any,
+    currentPrompt: string,
+    context: ConversationContext
+  ): {
+    level: "high" | "medium" | "low";
+    score: number;
+    factors: {
+      searchResultQuality?: number;
+      contextAvailability?: number;
+      querySpecificity?: number;
+      historicalMatch?: number;
+    };
+  } {
+    const factors = {
+      searchResultQuality: 0.5, // Default neutral
+      contextAvailability: 0.5, // Default neutral
+      querySpecificity: 0.5, // Default neutral
+      historicalMatch: 0.5, // Default neutral
+    };
+
+    // Calculate query specificity based on prompt characteristics
+    factors.querySpecificity = this.calculateQuerySpecificity(currentPrompt, analysis);
+
+    // Calculate context availability based on available context
+    factors.contextAvailability = this.calculateContextAvailability(context, analysis);
+
+    // For recall queries, we'll update search result quality later when we have search results
+    if (analysis.relationshipToHistory === "recall") {
+      // Recall queries start with medium confidence, will be updated based on search results
+      factors.searchResultQuality = 0.6;
+      factors.historicalMatch = 0.6;
+    }
+
+    // Calculate overall confidence score (weighted average)
+    const weights = {
+      searchResultQuality: 0.3,
+      contextAvailability: 0.25,
+      querySpecificity: 0.25,
+      historicalMatch: 0.2,
+    };
+
+    const score = 
+      factors.searchResultQuality * weights.searchResultQuality +
+      factors.contextAvailability * weights.contextAvailability +
+      factors.querySpecificity * weights.querySpecificity +
+      factors.historicalMatch * weights.historicalMatch;
+
+    // Determine confidence level
+    let level: "high" | "medium" | "low";
+    if (score >= 0.75) {
+      level = "high";
+    } else if (score >= 0.5) {
+      level = "medium";
+    } else {
+      level = "low";
+    }
+
+    return { level, score, factors };
+  }
+
+  private calculateQuerySpecificity(prompt: string, analysis: any): number {
+    let specificity = 0.5; // Base score
+
+    // Check for specific recall indicators
+    const recallIndicators = [
+      "what did we discuss",
+      "remember when",
+      "tell me about",
+      "what was the word",
+      "definition",
+      "we talked about",
+    ];
+
+    const hasRecallIndicators = recallIndicators.some(indicator =>
+      prompt.toLowerCase().includes(indicator)
+    );
+
+    if (hasRecallIndicators) {
+      specificity += 0.2;
+    }
+
+    // Check for specific topics or keywords
+    if (analysis.keyTopics && analysis.keyTopics.length > 0) {
+      specificity += Math.min(analysis.keyTopics.length * 0.1, 0.3);
+    }
+
+    // Check for question words that indicate specific information seeking
+    const questionWords = ["what", "when", "where", "who", "how", "which"];
+    const hasQuestionWords = questionWords.some(word =>
+      prompt.toLowerCase().includes(word)
+    );
+
+    if (hasQuestionWords) {
+      specificity += 0.1;
+    }
+
+    return Math.min(specificity, 1.0);
+  }
+
+  private calculateContextAvailability(context: ConversationContext, analysis: any): number {
+    let availability = 0.3; // Base score
+
+    // Check message history availability
+    if (context.messages && context.messages.length > 0) {
+      availability += Math.min(context.messages.length * 0.05, 0.3);
+    }
+
+    // Check summaries availability
+    if (context.summaries && context.summaries.length > 0) {
+      availability += Math.min(context.summaries.length * 0.1, 0.4);
+    }
+
+    return Math.min(availability, 1.0);
+  }
+
+  /**
+   * Updates confidence scores based on actual search results from smart context service
+   */
+  updateConfidenceWithSearchResults(
+    intentAnalysis: IntentAnalysisResult,
+    smartContextResult: SmartContextResult
+  ): IntentAnalysisResult {
+    if (!smartContextResult.confidence) {
+      return intentAnalysis; // No confidence data available
+    }
+
+    const { confidence } = smartContextResult;
+    
+    // Update search result quality with actual data
+    intentAnalysis.confidenceFactors.searchResultQuality = confidence.searchResultQuality;
+    
+    // Update historical match based on search results
+    if (confidence.hasStrongMatches) {
+      intentAnalysis.confidenceFactors.historicalMatch = Math.max(
+        confidence.averageSimilarity,
+        0.7
+      );
+    } else if (confidence.resultCount > 0) {
+      intentAnalysis.confidenceFactors.historicalMatch = confidence.averageSimilarity;
+    } else {
+      intentAnalysis.confidenceFactors.historicalMatch = 0.1; // Very low if no results
+    }
+
+    // Recalculate overall confidence score
+    const factors = intentAnalysis.confidenceFactors;
+    const weights = {
+      searchResultQuality: 0.35,
+      contextAvailability: 0.25,
+      querySpecificity: 0.25,
+      historicalMatch: 0.15,
+    };
+
+    intentAnalysis.confidenceScore = 
+      (factors.searchResultQuality || 0) * weights.searchResultQuality +
+      (factors.contextAvailability || 0) * weights.contextAvailability +
+      (factors.querySpecificity || 0) * weights.querySpecificity +
+      (factors.historicalMatch || 0) * weights.historicalMatch;
+
+    // Update confidence level based on new score
+    if (intentAnalysis.confidenceScore >= 0.7) {
+      intentAnalysis.confidenceLevel = "high";
+    } else if (intentAnalysis.confidenceScore >= 0.4) {
+      intentAnalysis.confidenceLevel = "medium";
+    } else {
+      intentAnalysis.confidenceLevel = "low";
+    }
+
+    return intentAnalysis;
   }
 }

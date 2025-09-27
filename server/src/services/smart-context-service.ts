@@ -18,11 +18,17 @@ export interface SmartContextResult {
   retrievalMethod: string;
   totalAvailable: number;
   retrieved: number;
+  confidence?: {
+    searchResultQuality: number;
+    averageSimilarity: number;
+    hasStrongMatches: boolean;
+    resultCount: number;
+    queryMatchRate: number;
+  };
   metadata?: {
     hasExactMatches?: boolean;
     searchQueries?: string[];
     suggestRelatedTopics?: boolean;
-    // Date-based search metadata
     dateQuery?: string;
     includeHours?: boolean;
     totalFound?: number;
@@ -162,11 +168,32 @@ export class SmartContextService {
 
     const totalCount = await this.getTotalSummariesCount(conversationId);
 
+    // Calculate confidence for recent context
+    const hasTopicFilter = keyTopics && keyTopics.length > 0;
+    const resultRatio = summaries.length / limit;
+    
+    // For recent context, confidence is based on availability and topic matching
+    let searchResultQuality = 0.6; // Base confidence for recent context
+    if (hasTopicFilter) {
+      // If we have topic filters and got results, increase confidence
+      searchResultQuality = summaries.length > 0 ? 0.8 : 0.3;
+    } else {
+      // For pure recent context, confidence depends on how much we retrieved
+      searchResultQuality = 0.4 + (resultRatio * 0.4); // 0.4 to 0.8 range
+    }
+
     return {
       summaries,
       retrievalMethod: "recent_only",
       totalAvailable: totalCount,
       retrieved: summaries.length,
+      confidence: {
+        searchResultQuality,
+        averageSimilarity: 0.5, // Default for recent context
+        hasStrongMatches: Boolean(hasTopicFilter && summaries.length > 0),
+        resultCount: summaries.length,
+        queryMatchRate: hasTopicFilter ? (summaries.length > 0 ? 1 : 0) : 1,
+      },
     };
   }
 
@@ -252,11 +279,35 @@ export class SmartContextService {
 
     const totalCount = await this.getTotalSummariesCount(conversationId);
 
+    // Calculate confidence metrics
+    const similarities = summaries.map(s => s.topicRelevance).filter(s => s !== undefined);
+    const averageSimilarity = similarities.length > 0 ? similarities.reduce((a, b) => a + b, 0) / similarities.length : 0;
+    const hasStrongMatches = similarities.some(s => s >= 0.7);
+    const queryMatchRate = summaries.length > 0 ? summaries.length / searchQueries.length : 0;
+    
+    // Calculate overall search result quality (0-1 scale)
+    let searchResultQuality = 0;
+    if (summaries.length > 0) {
+      const similarityScore = Math.min(averageSimilarity * 2, 1); // Scale similarity to 0-1
+      const countScore = Math.min(summaries.length / limit, 1); // How many results we got vs requested
+      const matchScore = hasStrongMatches ? 1 : 0.5; // Bonus for strong matches
+      const queryScore = Math.min(queryMatchRate, 1); // How well we matched queries
+      
+      searchResultQuality = (similarityScore * 0.4 + countScore * 0.2 + matchScore * 0.3 + queryScore * 0.1);
+    }
+
     return {
       summaries,
       retrievalMethod: "semantic_search",
       totalAvailable: totalCount,
       retrieved: summaries.length,
+      confidence: {
+        searchResultQuality,
+        averageSimilarity,
+        hasStrongMatches,
+        resultCount: summaries.length,
+        queryMatchRate,
+      },
       metadata: {
         hasExactMatches,
         searchQueries,
