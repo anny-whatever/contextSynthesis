@@ -18,6 +18,7 @@ import {
   AreaChart,
   Area,
 } from "recharts";
+import { AnalyticsApiService } from "@/services/analyticsApi";
 
 interface TimelineData {
   date: string;
@@ -41,13 +42,7 @@ export function UsageCharts({ timeframe, detailed = false }: UsageChartsProps) {
     const fetchTimelineData = async () => {
       try {
         setLoading(true);
-        const response = await fetch(
-          `/api/analytics/usage-timeline?timeframe=${timeframe}`
-        );
-        if (!response.ok) {
-          throw new Error("Failed to fetch timeline data");
-        }
-        const result = await response.json();
+        const result = await AnalyticsApiService.getUsageTimeline(timeframe);
         setData(result.data.timeline || []);
         setError(null);
       } catch (err) {

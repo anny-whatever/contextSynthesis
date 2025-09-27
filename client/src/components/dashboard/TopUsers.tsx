@@ -6,6 +6,7 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Progress } from "@/components/ui/progress";
 import { Trophy, Medal, Award, User } from "lucide-react";
+import { AnalyticsApiService } from "@/services/analyticsApi";
 
 interface UserData {
   userId: string;
@@ -36,11 +37,7 @@ export function TopUsers({ timeframe, limit = 10 }: TopUsersProps) {
     const fetchTopUsers = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`/api/analytics/top-users?timeframe=${timeframe}&limit=${limit}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch top users data');
-        }
-        const result = await response.json();
+        const result = await AnalyticsApiService.getTopUsers(timeframe, limit);
         setData(result.data.topUsers || []);
         setError(null);
       } catch (err) {

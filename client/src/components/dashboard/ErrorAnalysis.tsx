@@ -6,6 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from "recharts";
 import { AlertTriangle, CheckCircle, XCircle, TrendingUp, TrendingDown } from "lucide-react";
+import { AnalyticsApiService } from "@/services/analyticsApi";
 
 interface ErrorData {
   operationType: string;
@@ -38,11 +39,7 @@ export function ErrorAnalysis({ timeframe }: ErrorAnalysisProps) {
     const fetchErrorData = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`/api/analytics/error-rates?timeframe=${timeframe}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch error data');
-        }
-        const result = await response.json();
+        const result = await AnalyticsApiService.getErrorRates(timeframe);
         setData(result.data.errorRates || []);
         setError(null);
       } catch (err) {

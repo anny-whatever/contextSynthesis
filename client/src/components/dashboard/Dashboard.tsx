@@ -1,10 +1,30 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ArrowLeft, BarChart3, Users, DollarSign, Clock, AlertTriangle, TrendingUp } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  ArrowLeft,
+  BarChart3,
+  Users,
+  DollarSign,
+  Clock,
+  AlertTriangle,
+  TrendingUp,
+} from "lucide-react";
 import { OverviewMetrics } from "./OverviewMetrics";
 import { UsageCharts } from "./UsageCharts";
 import { OperationBreakdown } from "./OperationBreakdown";
@@ -18,21 +38,23 @@ export function Dashboard() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <div className="border-b">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-4">
+        <div className="container px-4 py-4 mx-auto">
+          <div className="flex justify-between items-center">
+            <div className="flex gap-4 items-center">
               <Link to="/">
                 <Button variant="ghost" size="sm">
-                  <ArrowLeft className="h-4 w-4 mr-2" />
+                  <ArrowLeft className="mr-2 w-4 h-4" />
                   Back to Chat
                 </Button>
               </Link>
               <div>
                 <h1 className="text-2xl font-bold">Analytics Dashboard</h1>
-                <p className="text-muted-foreground">Monitor usage, costs, and performance metrics</p>
+                <p className="text-muted-foreground">
+                  Monitor usage, costs, and performance metrics
+                </p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex gap-4 items-center">
               <Select value={timeframe} onValueChange={setTimeframe}>
                 <SelectTrigger className="w-32">
                   <SelectValue />
@@ -50,34 +72,34 @@ export function Dashboard() {
       </div>
 
       {/* Main Content */}
-      <div className="container mx-auto px-4 py-6">
+      <div className="container px-4 py-6 mx-auto">
         <Tabs defaultValue="overview" className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="overview" className="flex items-center gap-2">
-              <BarChart3 className="h-4 w-4" />
+          <TabsList className="grid grid-cols-5 w-full">
+            <TabsTrigger value="overview" className="flex gap-2 items-center">
+              <BarChart3 className="w-4 h-4" />
               Overview
             </TabsTrigger>
-            <TabsTrigger value="usage" className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4" />
+            <TabsTrigger value="usage" className="flex gap-2 items-center">
+              <TrendingUp className="w-4 h-4" />
               Usage Trends
             </TabsTrigger>
-            <TabsTrigger value="operations" className="flex items-center gap-2">
-              <Clock className="h-4 w-4" />
+            <TabsTrigger value="operations" className="flex gap-2 items-center">
+              <Clock className="w-4 h-4" />
               Operations
             </TabsTrigger>
-            <TabsTrigger value="users" className="flex items-center gap-2">
-              <Users className="h-4 w-4" />
+            <TabsTrigger value="users" className="flex gap-2 items-center">
+              <Users className="w-4 h-4" />
               Top Users
             </TabsTrigger>
-            <TabsTrigger value="errors" className="flex items-center gap-2">
-              <AlertTriangle className="h-4 w-4" />
+            <TabsTrigger value="errors" className="flex gap-2 items-center">
+              <AlertTriangle className="w-4 h-4" />
               Error Analysis
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
             <OverviewMetrics timeframe={timeframe} />
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
               <UsageCharts timeframe={timeframe} />
               <OperationBreakdown timeframe={timeframe} />
             </div>

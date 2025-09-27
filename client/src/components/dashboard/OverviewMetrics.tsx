@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DollarSign, MessageSquare, Users, Clock, Zap, TrendingUp } from "lucide-react";
+import { AnalyticsApiService } from "@/services/analyticsApi";
 
 interface OverviewData {
   totalUsages: number;
@@ -28,11 +29,7 @@ export function OverviewMetrics({ timeframe }: OverviewMetricsProps) {
     const fetchOverviewData = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`/api/analytics/overview?timeframe=${timeframe}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch overview data');
-        }
-        const result = await response.json();
+        const result = await AnalyticsApiService.getOverview(timeframe);
         setData(result.data.overview);
         setError(null);
       } catch (err) {

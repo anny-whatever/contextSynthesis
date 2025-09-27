@@ -4,6 +4,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import { AnalyticsApiService } from "@/services/analyticsApi";
 
 interface OperationData {
   operationType: string;
@@ -41,11 +42,7 @@ export function OperationBreakdown({ timeframe, detailed = false }: OperationBre
     const fetchOperationData = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`/api/analytics/usage-by-operation?timeframe=${timeframe}`);
-        if (!response.ok) {
-          throw new Error('Failed to fetch operation data');
-        }
-        const result = await response.json();
+        const result = await AnalyticsApiService.getUsageByOperation(timeframe);
         setData(result.data.usageByOperation || []);
         setError(null);
       } catch (err) {
