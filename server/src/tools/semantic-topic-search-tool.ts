@@ -3,12 +3,15 @@ import { BaseTool } from './base-tool';
 import { ToolConfig, ToolParameter, ToolResult, ToolContext } from '../types/tool';
 import { TopicEmbeddingService } from '../services/topic-embedding-service';
 import { PrismaClient } from '@prisma/client';
+import { TimeUtility } from '../utils/time-utility';
 
 const semanticTopicSearchSchema = z.object({
   query: z.string().describe('The search query to find semantically similar topics'),
   conversationId: z.string().describe('The conversation ID to search within'),
   limit: z.number().optional().default(5).describe('Maximum number of results to return'),
-  threshold: z.number().optional().default(0.7).describe('Similarity threshold (0-1, higher = more similar)')
+  threshold: z.number().optional().default(0.7).describe('Similarity threshold (0-1, higher = more similar)'),
+  dateFilter: z.string().optional().describe('Date or date range filter (e.g., "yesterday", "last 5 days", "2025-08-05", "2025-08-05 to 2025-08-10")'),
+  includeHours: z.boolean().optional().default(false).describe('Include hour-level granularity in date filtering')
 });
 
 export class SemanticTopicSearchTool extends BaseTool {
@@ -50,6 +53,20 @@ export class SemanticTopicSearchTool extends BaseTool {
         description: 'Similarity threshold (0-1, higher = more similar)',
         required: false,
         default: 0.7
+      },
+      {
+        name: 'dateFilter',
+        type: 'string',
+        description: 'Date or date range filter (e.g., "yesterday", "last 5 days", "2025-08-05", "2025-08-05 to 2025-08-10")',
+        required: false,
+        examples: ['yesterday', 'last 5 days', '2025-08-05', '2025-08-05 to 2025-08-10']
+      },
+      {
+        name: 'includeHours',
+        type: 'boolean',
+        description: 'Include hour-level granularity in date filtering',
+        required: false,
+        default: false
       }
     ];
 
@@ -60,7 +77,7 @@ export class SemanticTopicSearchTool extends BaseTool {
   async executeInternal(input: any, context?: ToolContext): Promise<ToolResult> {
     try {
       const validatedInput = semanticTopicSearchSchema.parse(input);
-      const { query, conversationId, limit, threshold } = validatedInput;
+      const { query, conversationId, limit, threshold, dateFilter, includeHours } = validatedInput;
 
       // Generate embedding for the search query
       const queryEmbedding = await this.embeddingService.generateTopicEmbedding(query);
@@ -73,8 +90,58 @@ export class SemanticTopicSearchTool extends BaseTool {
         };
       }
 
-      // Search for similar topics using cosine similarity within the specific conversation
-      const results = await this.prisma.$queryRaw`
+      // Build date filter conditions
+      let dateConditions = '';
+      let dateParams: any[] = [];
+      let timeResult: any = null;
+      
+      if (dateFilter) {
+        timeResult = TimeUtility.parseTimeQuery(dateFilter);
+        
+        if (!timeResult.isValid) {
+          return {
+            success: false,
+            error: `Invalid date filter: ${timeResult.error}`,
+            data: null
+          };
+        }
+
+        if (timeResult.startDate && timeResult.endDate) {
+          // Date range
+          if (includeHours) {
+            dateConditions = `AND cs."createdAt" >= $${dateParams.length + 1}::timestamp AND cs."createdAt" <= $${dateParams.length + 2}::timestamp`;
+            dateParams.push(timeResult.startDate.toISOString(), timeResult.endDate.toISOString());
+          } else {
+            // Day-level granularity
+            const startOfDay = new Date(timeResult.startDate);
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date(timeResult.endDate);
+            endOfDay.setHours(23, 59, 59, 999);
+            
+            dateConditions = `AND cs."createdAt" >= $${dateParams.length + 1}::timestamp AND cs."createdAt" <= $${dateParams.length + 2}::timestamp`;
+            dateParams.push(startOfDay.toISOString(), endOfDay.toISOString());
+          }
+        } else if (timeResult.startDate) {
+          // Single date
+          if (includeHours) {
+            const endDate = new Date(timeResult.startDate.getTime() + 60 * 60 * 1000); // Add 1 hour
+            dateConditions = `AND cs."createdAt" >= $${dateParams.length + 1}::timestamp AND cs."createdAt" < $${dateParams.length + 2}::timestamp`;
+            dateParams.push(timeResult.startDate.toISOString(), endDate.toISOString());
+          } else {
+            // Day-level granularity
+            const startOfDay = new Date(timeResult.startDate);
+            startOfDay.setHours(0, 0, 0, 0);
+            const endOfDay = new Date(timeResult.startDate);
+            endOfDay.setHours(23, 59, 59, 999);
+            
+            dateConditions = `AND cs."createdAt" >= $${dateParams.length + 1}::timestamp AND cs."createdAt" <= $${dateParams.length + 2}::timestamp`;
+            dateParams.push(startOfDay.toISOString(), endOfDay.toISOString());
+          }
+        }
+      }
+
+      // Build the query with date filtering
+      const queryText = `
         SELECT 
           cs.id,
           cs."conversationId",
@@ -87,26 +154,45 @@ export class SemanticTopicSearchTool extends BaseTool {
           cs."batchId",
           cs."createdAt",
           cs."updatedAt",
-          (cs."topicEmbedding" <=> ${`[${queryEmbedding.join(',')}]`}::vector) as similarity_score
+          (cs."topicEmbedding" <=> $1::vector) as similarity_score
         FROM conversation_summaries cs
         WHERE cs."topicEmbedding" IS NOT NULL
-          AND cs."conversationId" = ${conversationId}
-          AND (cs."topicEmbedding" <=> ${`[${queryEmbedding.join(',')}]`}::vector) <= ${1 - threshold}
+          AND cs."conversationId" = $2
+          AND (cs."topicEmbedding" <=> $1::vector) <= $3
+          ${dateConditions}
         ORDER BY similarity_score ASC
-        LIMIT ${limit}
+        LIMIT $${4 + dateParams.length}
       `;
+
+      const queryParams = [
+        `[${queryEmbedding.join(',')}]`,
+        conversationId,
+        1 - threshold,
+        ...dateParams,
+        limit
+      ];
+
+      const results = await this.prisma.$queryRawUnsafe(queryText, ...queryParams);
 
       return {
         success: true,
         data: {
           query,
           results: results || [],
-          count: Array.isArray(results) ? results.length : 0
+          count: Array.isArray(results) ? results.length : 0,
+          dateFilter: dateFilter || null,
+          dateRange: dateFilter ? {
+            startDate: timeResult?.startDate?.toISOString() || null,
+            endDate: timeResult?.endDate?.toISOString() || null,
+            includeHours
+          } : null
         },
         metadata: {
           searchQuery: query,
           threshold,
           limit,
+          dateFilter,
+          includeHours,
           executionTime: Date.now()
         }
       };

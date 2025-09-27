@@ -1,5 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 import { SemanticTopicSearchTool } from "../tools/semantic-topic-search-tool";
+import { DateBasedTopicSearchTool } from "../tools/date-based-topic-search-tool";
 import { IntentAnalysisResult } from "./intent-analysis-service";
 
 export interface SmartContextResult {
@@ -12,6 +13,7 @@ export interface SmartContextResult {
     topicRelevance: number;
     createdAt?: string;
     isExactMatch?: boolean;
+    timeMatch?: any;
   }>;
   retrievalMethod: string;
   totalAvailable: number;
@@ -20,19 +22,31 @@ export interface SmartContextResult {
     hasExactMatches?: boolean;
     searchQueries?: string[];
     suggestRelatedTopics?: boolean;
+    // Date-based search metadata
+    dateQuery?: string;
+    includeHours?: boolean;
+    totalFound?: number;
+    hasMoreTopics?: boolean;
+    remainingCount?: number;
+    warning?: string;
+    parsedTime?: any;
   };
 }
 
 export class SmartContextService {
   private prisma: PrismaClient;
   private semanticSearchTool: SemanticTopicSearchTool;
+  private dateBasedSearchTool: DateBasedTopicSearchTool;
 
   constructor(
     prisma: PrismaClient,
-    semanticSearchTool: SemanticTopicSearchTool
+    semanticSearchTool: SemanticTopicSearchTool,
+    dateBasedSearchTool?: DateBasedTopicSearchTool
   ) {
     this.prisma = prisma;
     this.semanticSearchTool = semanticSearchTool;
+    this.dateBasedSearchTool =
+      dateBasedSearchTool || new DateBasedTopicSearchTool(prisma);
   }
 
   async retrieveContext(
@@ -72,11 +86,25 @@ export class SmartContextService {
           maxContextItems || 5
         );
 
+      case "date_based_search":
+        return await this.getDateBasedContext(
+          conversationId,
+          intentAnalysis.dateQuery || "",
+          intentAnalysis.maxContextItems || 10,
+          intentAnalysis.includeHours || false
+        );
+
       case "all_available":
         return await this.getAllContext(conversationId, maxContextItems || 10);
 
       default:
-        return await this.getRecentContext(conversationId, 3, keyTopics);
+        console.warn(
+          `Unknown context retrieval strategy: ${contextRetrievalStrategy}`
+        );
+        return await this.getRecentContext(
+          conversationId,
+          maxContextItems || 3
+        );
     }
   }
 
@@ -167,7 +195,11 @@ export class SmartContextService {
         });
 
         // If no exact matches found, try with lower threshold for related topics
-        if (!searchResults.success || !searchResults.data || searchResults.data.results.length === 0) {
+        if (
+          !searchResults.success ||
+          !searchResults.data ||
+          searchResults.data.results.length === 0
+        ) {
           searchResults = await this.semanticSearchTool.execute({
             query,
             conversationId,
@@ -207,12 +239,12 @@ export class SmartContextService {
         const timeA = new Date(a.createdAt).getTime();
         const timeB = new Date(b.createdAt).getTime();
         const timeDiff = timeB - timeA;
-        
+
         // If time difference is significant (more than 1 hour), prioritize by time
         if (Math.abs(timeDiff) > 3600000) {
           return timeDiff;
         }
-        
+
         // Otherwise, sort by relevance
         return b.topicRelevance - a.topicRelevance;
       })
@@ -228,9 +260,74 @@ export class SmartContextService {
       metadata: {
         hasExactMatches,
         searchQueries,
-        suggestRelatedTopics: !hasExactMatches && summaries.length > 0
-      }
+        suggestRelatedTopics: !hasExactMatches && summaries.length > 0,
+      },
     };
+  }
+
+  private async getDateBasedContext(
+    conversationId: string,
+    dateQuery: string,
+    limit: number,
+    includeHours: boolean
+  ): Promise<SmartContextResult> {
+    try {
+      const searchResults = await this.dateBasedSearchTool.execute({
+        query: dateQuery,
+        conversationId,
+        limit,
+        includeHours,
+      });
+
+      if (!searchResults.success || !searchResults.data) {
+        console.warn(
+          `Date-based search failed for query "${dateQuery}":`,
+          searchResults.error
+        );
+        // Fallback to recent context
+        return await this.getRecentContext(conversationId, limit);
+      }
+
+      const { topics, totalFound, hasMoreTopics, remainingCount, warning } =
+        searchResults.data;
+
+      // Transform topics to match SmartContextResult format
+      const summaries = topics.map((topic: any) => ({
+        summaryText: topic.summaryText,
+        topicName: topic.topicName,
+        relatedTopics: topic.relatedTopics,
+        messageRange: topic.messageRange,
+        summaryLevel: 1, // Date-based searches typically return topic-level summaries
+        topicRelevance: topic.topicRelevance || 0.8, // High relevance for date matches
+        createdAt: topic.createdAt.toISOString(),
+        timeMatch: topic.timeMatch,
+      }));
+
+      const totalCount = await this.getTotalSummariesCount(conversationId);
+
+      return {
+        summaries,
+        retrievalMethod: "date_based_search",
+        totalAvailable: totalCount,
+        retrieved: summaries.length,
+        metadata: {
+          dateQuery,
+          includeHours,
+          totalFound,
+          hasMoreTopics,
+          remainingCount,
+          warning,
+          parsedTime: searchResults.data.parsedTime,
+        },
+      };
+    } catch (error) {
+      console.error(
+        `Error in date-based context retrieval for query "${dateQuery}":`,
+        error
+      );
+      // Fallback to recent context
+      return await this.getRecentContext(conversationId, limit);
+    }
   }
 
   private async getAllContext(

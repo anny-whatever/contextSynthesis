@@ -1,6 +1,9 @@
 import { ITool, ToolDefinition, ToolResult, ToolExecutionOptions, ToolUsageMetrics } from '../types/tool';
 import { WebSearchTool } from './web-search-tool';
 import { SemanticTopicSearchTool } from './semantic-topic-search-tool';
+import { DateBasedTopicSearchTool } from './date-based-topic-search-tool';
+import { TopicCountTool } from './topic-count-tool';
+import { CurrentTimeTool } from './current-time-tool';
 import { TopicEmbeddingService } from '../services/topic-embedding-service';
 import { PrismaClient } from '@prisma/client';
 import OpenAI from 'openai';
@@ -30,6 +33,18 @@ export class ToolRegistry {
     const embeddingService = new TopicEmbeddingService(this.openai, this.prisma);
     const semanticSearchTool = new SemanticTopicSearchTool(embeddingService, this.prisma);
     this.registerTool(semanticSearchTool);
+
+    // Register the date-based topic search tool
+    const dateBasedSearchTool = new DateBasedTopicSearchTool(this.prisma);
+    this.registerTool(dateBasedSearchTool);
+
+    // Register the topic count tool
+    const topicCountTool = new TopicCountTool(this.prisma);
+    this.registerTool(topicCountTool);
+
+    // Register the current time tool
+    const currentTimeTool = new CurrentTimeTool(this.prisma);
+    this.registerTool(currentTimeTool);
   }
 
   /**

@@ -42,7 +42,8 @@ export class AgentService {
       });
 
     this.prisma = prisma || new PrismaClient();
-    this.toolRegistry = toolRegistry || new ToolRegistry(this.prisma, this.openai);
+    this.toolRegistry =
+      toolRegistry || new ToolRegistry(this.prisma, this.openai);
     this.intentAnalysisService = new IntentAnalysisService(
       this.prisma,
       this.openai
@@ -51,13 +52,27 @@ export class AgentService {
       this.prisma,
       this.openai
     );
-    
-    // Initialize SmartContextService with the semantic search tool
-    const semanticSearchTool = this.toolRegistry.getTool('semantic_topic_search');
+
+    // Initialize SmartContextService with both semantic and date-based search tools
+    const semanticSearchTool = this.toolRegistry.getTool(
+      "semantic_topic_search"
+    );
+    const dateBasedSearchTool = this.toolRegistry.getTool(
+      "date_based_topic_search"
+    );
+
     if (!semanticSearchTool) {
-      throw new Error('SemanticTopicSearchTool not found in tool registry');
+      throw new Error("SemanticTopicSearchTool not found in tool registry");
     }
-    this.smartContextService = new SmartContextService(this.prisma, semanticSearchTool as any);
+    if (!dateBasedSearchTool) {
+      throw new Error("DateBasedTopicSearchTool not found in tool registry");
+    }
+
+    this.smartContextService = new SmartContextService(
+      this.prisma,
+      semanticSearchTool as any,
+      dateBasedSearchTool as any
+    );
 
     this.config = {
       model: process.env.DEFAULT_AGENT_MODEL || "gpt-4o-mini",
@@ -419,10 +434,14 @@ export class AgentService {
         console.log("📊 [AGENT] Created conversation summary batch:", {
           batchId: summaryResult.batchId,
           topicCount: summaryResult.summaries.length,
-          topics: summaryResult.summaries.map((s: any) => s.topicName).join(', ')
+          topics: summaryResult.summaries
+            .map((s: any) => s.topicName)
+            .join(", "),
         });
       } else {
-        console.log("📊 [AGENT] No summary created - threshold not met or other condition");
+        console.log(
+          "📊 [AGENT] No summary created - threshold not met or other condition"
+        );
       }
 
       const duration = Date.now() - startTime;
@@ -506,17 +525,20 @@ export class AgentService {
 
     // Add conversation summaries as context if they exist
     const summaries = context.metadata?.summaries as any[];
-    
+
     // Debug logging for summaries
     console.log("🔍 [DEBUG] Summary processing:", {
       hasSummaries: !!summaries,
       summariesLength: summaries?.length || 0,
       metadata: context.metadata,
-      summariesData: summaries
+      summariesData: summaries,
     });
-    
+
     if (summaries && summaries.length > 0) {
-      console.log("📚 [SUMMARIES] Adding summaries to system prompt:", summaries.length);
+      console.log(
+        "📚 [SUMMARIES] Adding summaries to system prompt:",
+        summaries.length
+      );
       systemPrompt += `\n\n## CONVERSATION HISTORY SUMMARIES
 The following summaries provide context from earlier parts of this conversation:
 
@@ -525,14 +547,16 @@ The following summaries provide context from earlier parts of this conversation:
         console.log(`📚 [SUMMARY ${index + 1}] Adding summary:`, {
           level: summary.summaryLevel,
           messageCount: summary.messageRange?.messageCount,
-          relatedTopics: summary.relatedTopics
+          relatedTopics: summary.relatedTopics,
         });
-        
-        const relatedTopicsStr = Array.isArray(summary.relatedTopics) 
-          ? summary.relatedTopics.join(", ") 
+
+        const relatedTopicsStr = Array.isArray(summary.relatedTopics)
+          ? summary.relatedTopics.join(", ")
           : "No related topics";
-        
-        systemPrompt += `**Summary ${index + 1} (Level ${summary.summaryLevel}):**
+
+        systemPrompt += `**Summary ${index + 1} (Level ${
+          summary.summaryLevel
+        }):**
 ${summary.summaryText}
 **Key Topics**: ${relatedTopicsStr}
 **Covers**: ${summary.messageRange?.messageCount || 0} messages
@@ -547,11 +571,16 @@ ${summary.summaryText}
 
     // Add topic inference guidance if we have related but not exact matches
     const smartContext = context.metadata?.smartContext as any;
-    if (smartContext?.suggestRelatedTopics && !smartContext?.hasExactMatches && summaries && summaries.length > 0) {
+    if (
+      smartContext?.suggestRelatedTopics &&
+      !smartContext?.hasExactMatches &&
+      summaries &&
+      summaries.length > 0
+    ) {
       systemPrompt += `\n\n## TOPIC INFERENCE GUIDANCE
 The user's query didn't find exact matches in our conversation history, but we found related topics that might be what they're referring to. 
 
-**Related topics found**: ${summaries.map(s => s.topicName).join(", ")}
+**Related topics found**: ${summaries.map((s) => s.topicName).join(", ")}
 **Search queries used**: ${smartContext.searchQueries?.join(", ") || "N/A"}
 
 IMPORTANT: Instead of saying "no previous mentions found", acknowledge the related topics and ask for clarification. For example:
@@ -592,9 +621,11 @@ Use this context to provide more relevant and focused responses that align with 
     // Debug: Log the actual system prompt to verify summary inclusion
     console.log("🔍 [DEBUG] System prompt content check:", {
       systemPromptLength: systemPrompt.length,
-      includesSummarySection: systemPrompt.includes("## CONVERSATION HISTORY SUMMARIES"),
+      includesSummarySection: systemPrompt.includes(
+        "## CONVERSATION HISTORY SUMMARIES"
+      ),
       includesSummaryText: systemPrompt.includes("Summary 1"),
-      fullSystemPrompt: systemPrompt // Show complete system prompt
+      fullSystemPrompt: systemPrompt, // Show complete system prompt
     });
 
     // Add conversation history (limit to maxConversationHistory)
@@ -719,21 +750,22 @@ Use this context to provide more relevant and focused responses that align with 
       });
 
       // Load summaries separately since they're not directly related to conversation
-      const conversationSummaries = await this.prisma.conversationSummary.findMany({
-        where: { conversationId },
-        orderBy: { createdAt: "asc" },
-        select: {
-          id: true,
-          summaryText: true,
-          topicName: true,
-          relatedTopics: true,
-          messageRange: true,
-          summaryLevel: true,
-          topicRelevance: true,
-          batchId: true,
-          createdAt: true,
-        },
-      });
+      const conversationSummaries =
+        await this.prisma.conversationSummary.findMany({
+          where: { conversationId },
+          orderBy: { createdAt: "asc" },
+          select: {
+            id: true,
+            summaryText: true,
+            topicName: true,
+            relatedTopics: true,
+            messageRange: true,
+            summaryLevel: true,
+            topicRelevance: true,
+            batchId: true,
+            createdAt: true,
+          },
+        });
 
       if (!conversation) {
         // If conversation doesn't exist, return empty context instead of creating a new one
@@ -785,7 +817,11 @@ Use this context to provide more relevant and focused responses that align with 
         conversationId,
         summariesCount: summaries.length,
         last3TurnsMessagesCount: messageHistory.length,
-        totalContextReduction: summaries.reduce((acc: number, s: any) => acc + (s.messageRange as any)?.messageCount || 0, 0),
+        totalContextReduction: summaries.reduce(
+          (acc: number, s: any) =>
+            acc + (s.messageRange as any)?.messageCount || 0,
+          0
+        ),
       });
 
       return {

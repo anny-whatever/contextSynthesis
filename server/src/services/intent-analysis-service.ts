@@ -15,9 +15,12 @@ export interface IntentAnalysisResult {
     | "none"
     | "recent_only"
     | "semantic_search"
-    | "all_available";
+    | "all_available"
+    | "date_based_search";
   semanticSearchQueries?: string[];
   maxContextItems?: number;
+  dateQuery?: string;
+  includeHours?: boolean;
 }
 
 export interface ConversationContext {
@@ -226,6 +229,7 @@ CONTEXT ANALYSIS RULES:
 5. Rate contextual relevance as high/medium/low
 6. Determine if historical context is needed and what retrieval strategy to use
 7. Generate semantic search queries if needed for context retrieval
+8. Detect date-based queries and temporal references for time-specific context retrieval
 
 CURRENT INTENT GUIDELINES:
 - Provide a detailed, specific description of what the user wants to achieve
@@ -250,8 +254,10 @@ RESPONSE FORMAT (JSON):
   "lastAssistantQuestion": "Last question asked by assistant (if any)",
   "compressedContext": "Brief summary of relevant context for this intent",
   "needsHistoricalContext": true|false,
-  "contextRetrievalStrategy": "none|recent_only|semantic_search|all_available",
+  "contextRetrievalStrategy": "none|recent_only|semantic_search|all_available|date_based_search",
   "semanticSearchQueries": ["query1", "query2"] (always provide, empty array if not semantic_search),
+  "dateQuery": "temporal reference if using date_based_search (e.g., 'yesterday', 'last 5 days', '2025-08-05')",
+  "includeHours": true|false (whether hour-level granularity is needed),
   "maxContextItems": 3-10 (recommended number of context items to retrieve)
 }
 
@@ -261,8 +267,11 @@ CONTEXT RETRIEVAL GUIDELINES:
   * "none": For simple greetings, basic questions that don't need history
   * "recent_only": For queries that only need the last few exchanges (last 2-3 messages)
   * "semantic_search": For queries about SPECIFIC TOPICS mentioned in the past, especially when user says "we talked about", "we discussed", "tell me about [specific thing]", or references specific subjects/items/concepts from history
+  * "date_based_search": For queries with temporal references like "yesterday", "last week", "on August 5th", "what did we discuss last Monday", "topics from last 5 days", or any date-specific requests
   * "all_available": For complex queries needing comprehensive context across entire conversation
 - semanticSearchQueries: Generate 1-3 specific search terms if using semantic_search strategy, empty array otherwise
+- dateQuery: Extract the temporal reference if using date_based_search strategy (e.g., "yesterday", "last 5 days", "2025-08-05", "last week")
+- includeHours: Set to true if the query requires hour-level granularity (e.g., "this morning", "this afternoon", "at 3pm yesterday")
 - maxContextItems: 
   * For BASIC/CASUAL queries (simple questions, general topics): 3 items max
   * For DETAILED/SPECIFIC queries (asking for "detailed", "comprehensive", "all", "everything", "in-depth"): 5-8 items
@@ -276,12 +285,26 @@ QUERY CLASSIFICATION FOR CONTEXT RETRIEVAL:
 CRITICAL SEMANTIC SEARCH RULE:
 If the user's query references SPECIFIC TOPICS, ITEMS, or CONCEPTS from past conversation (using phrases like "we talked about", "we discussed", "what were the", "tell me about [X]", "what did we say about"), you MUST use "semantic_search" strategy REGARDLESS of whether those topics appear in the current context. The semantic search will find the most relevant historical information about those specific topics.
 
+CRITICAL DATE-BASED SEARCH RULE:
+If the user's query contains TEMPORAL REFERENCES or DATE-SPECIFIC requests, you MUST use "date_based_search" strategy. This includes:
+- Relative time: "yesterday", "last week", "last 5 days", "last month", "this morning", "this afternoon"
+- Specific dates: "on August 5th", "August 5, 2025", "2025-08-05", "last Monday", "this Tuesday"
+- Date ranges: "from August 5th to 10th", "between last Monday and Wednesday", "in the last week"
+- Time-specific queries: "what did we discuss yesterday?", "topics from last 5 days", "what happened on Monday?"
+
 IMPORTANT: Use "semantic_search" when the user:
 - References specific topics, items, or concepts from past conversation
 - Uses phrases like "we talked about", "we discussed", "tell me about [X]", "what did we say about", "what were the [X] we discussed"
 - Asks about specific technical details, products, or subjects mentioned before
 - Wants information about something specific that was covered in previous exchanges
 - Even if some information about the topic exists in current context, use semantic_search to get comprehensive topic-specific information
+
+IMPORTANT: Use "date_based_search" when the user:
+- Asks about conversations from specific dates or time periods
+- Uses temporal references like "yesterday", "last week", "last 5 days", "this morning"
+- Wants to know what was discussed on specific dates
+- Requests topics or information from a particular time range
+- Combines date references with topic queries (e.g., "what did we discuss about APIs yesterday?")
 
 CONTEXT AMOUNT GUIDELINES:
 - If user asks casually about a topic without requesting details: maxContextItems = 3
@@ -363,6 +386,7 @@ GUIDELINES:
                     "recent_only",
                     "semantic_search",
                     "all_available",
+                    "date_based_search",
                   ],
                   description: "Strategy for retrieving historical context",
                 },
@@ -370,6 +394,14 @@ GUIDELINES:
                   type: "array",
                   items: { type: "string" },
                   description: "Search queries for semantic context retrieval",
+                },
+                dateQuery: {
+                  type: ["string", "null"],
+                  description: "Temporal reference for date-based search (e.g., 'yesterday', 'last 5 days', '2025-08-05')",
+                },
+                includeHours: {
+                  type: "boolean",
+                  description: "Whether hour-level granularity is needed for date filtering",
                 },
                 maxContextItems: {
                   type: "integer",
@@ -389,6 +421,8 @@ GUIDELINES:
                 "needsHistoricalContext",
                 "contextRetrievalStrategy",
                 "semanticSearchQueries",
+                "dateQuery",
+                "includeHours",
                 "maxContextItems",
               ],
               additionalProperties: false,
