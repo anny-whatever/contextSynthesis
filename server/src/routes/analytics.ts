@@ -861,9 +861,10 @@ router.get(
 
     // Group by messageId and operation type
     const messageMap = new Map();
-    const operationTypes = new Set();
+    const operationTypes = new Set<string>();
     let messageCount = 0;
 
+    // First pass: collect all operation types and create message entries
     usageData.forEach((record) => {
       const operationKey = record.operationSubtype || record.operationType;
       operationTypes.add(operationKey);
@@ -882,6 +883,16 @@ router.get(
         messageData[operationKey] = 0;
       }
       messageData[operationKey] += record.totalCost;
+    });
+
+    // Second pass: ensure all messages have all operation types (fill missing with 0)
+    const operationTypesArray = Array.from(operationTypes);
+    messageMap.forEach((messageData) => {
+      operationTypesArray.forEach((opType: string) => {
+        if ((messageData as any)[opType] === undefined) {
+          (messageData as any)[opType] = 0;
+        }
+      });
     });
 
     const timelineData = Array.from(messageMap.values()).sort((a, b) => 

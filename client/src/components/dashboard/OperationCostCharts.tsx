@@ -314,7 +314,7 @@ export function OperationCostCharts({
                 strokeWidth={2}
                 dot={{ fill: COLORS[index % COLORS.length], strokeWidth: 2, r: 3 }}
                 activeDot={{ r: 5, stroke: COLORS[index % COLORS.length], strokeWidth: 2 }}
-                connectNulls={false}
+                connectNulls={true}
               />
             ))}
           </LineChart>
