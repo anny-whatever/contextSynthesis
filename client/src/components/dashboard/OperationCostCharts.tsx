@@ -49,6 +49,13 @@ interface CumulativeData {
   createdAt: string;
 }
 
+interface PerMessageTimelineData {
+  messageCount: number;
+  messageId: string;
+  createdAt: string;
+  [operationType: string]: number | string;
+}
+
 interface OperationCostChartsProps {
   timeframe: string;
   detailed?: boolean;
@@ -74,6 +81,8 @@ export function OperationCostCharts({
   const [breakdown, setBreakdown] = useState<OperationBreakdownData[]>([]);
   const [timeline, setTimeline] = useState<TimelineData[]>([]);
   const [cumulativeData, setCumulativeData] = useState<CumulativeData[]>([]);
+  const [perMessageTimeline, setPerMessageTimeline] = useState<PerMessageTimelineData[]>([]);
+  const [perMessageOperationTypes, setPerMessageOperationTypes] = useState<string[]>([]);
   const [operationTypes, setOperationTypes] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,14 +92,29 @@ export function OperationCostCharts({
       try {
         setLoading(true);
         setError(null);
-        const [breakdownResponse, cumulativeResponse] = await Promise.all([
-          AnalyticsApiService.getOperationCostBreakdown(timeframe),
-          AnalyticsApiService.getCumulativeCost(timeframe),
-        ]);
-        setBreakdown(breakdownResponse.data.breakdown || []);
-        setTimeline(breakdownResponse.data.timeline || []);
-        setOperationTypes(breakdownResponse.data.operationTypes || []);
-        setCumulativeData(cumulativeResponse.data.cumulativeData || []);
+        
+        if (detailed) {
+          // For detailed view (Usage Trends), fetch per-message timeline data
+          const [breakdownResponse, perMessageResponse] = await Promise.all([
+            AnalyticsApiService.getOperationCostBreakdown(timeframe),
+            AnalyticsApiService.getPerMessageOperationTimeline(timeframe),
+          ]);
+          setBreakdown(breakdownResponse.data.breakdown || []);
+          setTimeline(breakdownResponse.data.timeline || []);
+          setOperationTypes(breakdownResponse.data.operationTypes || []);
+          setPerMessageTimeline(perMessageResponse.data.timeline || []);
+          setPerMessageOperationTypes(perMessageResponse.data.operationTypes || []);
+        } else {
+          // For overview, fetch cumulative data
+          const [breakdownResponse, cumulativeResponse] = await Promise.all([
+            AnalyticsApiService.getOperationCostBreakdown(timeframe),
+            AnalyticsApiService.getCumulativeCost(timeframe),
+          ]);
+          setBreakdown(breakdownResponse.data.breakdown || []);
+          setTimeline(breakdownResponse.data.timeline || []);
+          setOperationTypes(breakdownResponse.data.operationTypes || []);
+          setCumulativeData(cumulativeResponse.data || []);
+        }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to fetch data");
       } finally {
@@ -99,7 +123,7 @@ export function OperationCostCharts({
     };
 
     fetchData();
-  }, [timeframe]);
+  }, [timeframe, detailed]);
 
   const formatCurrency = (value: number) => {
     return new Intl.NumberFormat("en-US", {
@@ -247,29 +271,53 @@ export function OperationCostCharts({
       ),
     },
     {
-      title: detailed ? "Operation Cost Timeline" : "Cumulative Cost Growth",
+      title: detailed ? "Per-Message Operation Cost Timeline" : "Cumulative Cost Growth",
       description: detailed 
-        ? "Cost breakdown by operation type over time" 
+        ? "Cost breakdown by operation type per message" 
         : "Total spending growth over message count",
       component: detailed ? (
         <ResponsiveContainer width="100%" height={300}>
-          <AreaChart data={timeline}>
+          <LineChart data={perMessageTimeline}>
             <CartesianGrid strokeDasharray="3 3" />
-            <XAxis dataKey="date" tickFormatter={formatDate} fontSize={12} />
-            <YAxis tickFormatter={formatCurrency} fontSize={12} />
-            <Tooltip content={<AreaTooltip />} />
-            {operationTypes.slice(0, 6).map((opType, index) => (
-              <Area
+            <XAxis 
+              dataKey="messageCount" 
+              fontSize={12}
+              label={{
+                value: "Message Count",
+                position: "insideBottom",
+                offset: -5,
+              }}
+            />
+            <YAxis 
+              tickFormatter={formatCurrency} 
+              fontSize={12}
+              label={{
+                value: "Cost per Message ($)",
+                angle: -90,
+                position: "insideLeft",
+              }}
+            />
+            <Tooltip 
+              formatter={(value: number, name: string) => [
+                formatCurrency(value), 
+                name
+              ]}
+              labelFormatter={(label) => `Message #${label}`}
+            />
+            <Legend />
+            {perMessageOperationTypes.slice(0, 8).map((opType, index) => (
+              <Line
                 key={opType}
                 type="monotone"
                 dataKey={opType}
-                stackId="1"
                 stroke={COLORS[index % COLORS.length]}
-                fill={COLORS[index % COLORS.length]}
-                fillOpacity={0.6}
+                strokeWidth={2}
+                dot={{ fill: COLORS[index % COLORS.length], strokeWidth: 2, r: 3 }}
+                activeDot={{ r: 5, stroke: COLORS[index % COLORS.length], strokeWidth: 2 }}
+                connectNulls={false}
               />
             ))}
-          </AreaChart>
+          </LineChart>
         </ResponsiveContainer>
       ) : (
         <ResponsiveContainer width="100%" height={300}>

@@ -79,4 +79,12 @@ export class AnalyticsApiService {
       `/analytics/cumulative-cost?timeframe=${timeframe}`
     );
   }
+
+  static async getPerMessageOperationTimeline(timeframe: string = "7d") {
+    const response = await fetch(`/api/analytics/per-message-operation-timeline?timeframe=${timeframe}`);
+    if (!response.ok) {
+      throw new Error("Failed to fetch per-message operation timeline data");
+    }
+    return response.json();
+  }
 }

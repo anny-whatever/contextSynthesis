@@ -744,27 +744,28 @@ router.get(
   asyncHandler(async (req: Request, res: Response) => {
     const { timeframe = "7d" } = req.query;
 
+    // Calculate start date based on timeframe
     const now = new Date();
-    let startDate = new Date();
+    let startDate: Date;
 
     switch (timeframe) {
-      case "24h":
-        startDate.setHours(now.getHours() - 24);
+      case "1d":
+        startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
         break;
       case "7d":
-        startDate.setDate(now.getDate() - 7);
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
         break;
       case "30d":
-        startDate.setDate(now.getDate() - 30);
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
         break;
       case "90d":
-        startDate.setDate(now.getDate() - 90);
+        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
         break;
       default:
-        startDate.setDate(now.getDate() - 7);
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
     }
 
-    // Get all usage data ordered by creation time
+    // Get usage tracking data for cumulative cost calculation
     const usageData = await prisma.usageTracking.findMany({
       where: {
         createdAt: {
@@ -787,38 +788,111 @@ router.get(
     let messageCount = 0;
 
     usageData.forEach((record) => {
-      if (record.messageId && !messageMap.has(record.messageId)) {
+      if (!messageMap.has(record.messageId)) {
         messageCount++;
-        cumulativeCost += record.totalCost;
         messageMap.set(record.messageId, {
           messageCount,
-          cumulativeCost,
-          createdAt: record.createdAt,
-        });
-      } else if (record.messageId && messageMap.has(record.messageId)) {
-        // Update cumulative cost for existing message
-        cumulativeCost += record.totalCost;
-        const existing = messageMap.get(record.messageId);
-        messageMap.set(record.messageId, {
-          ...existing,
-          cumulativeCost,
+          cumulativeCost: 0,
+          createdAt: record.createdAt.toISOString(),
         });
       }
+      
+      const messageData = messageMap.get(record.messageId);
+      messageData.cumulativeCost += record.totalCost;
+      cumulativeCost += record.totalCost;
+      messageData.cumulativeCost = cumulativeCost;
     });
 
-    const cumulativeData = Array.from(messageMap.values()).map((item, index) => ({
-      messageCount: index + 1,
-      cumulativeCost: item.cumulativeCost,
-      createdAt: item.createdAt,
-    }));
+    const cumulativeData = Array.from(messageMap.values());
+
+    res.json({
+      success: true,
+      data: cumulativeData,
+    });
+  })
+);
+
+// Get per-message operation cost timeline for multi-line chart
+router.get(
+  "/per-message-operation-timeline",
+  apiLimiter,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { timeframe = "7d" } = req.query;
+
+    // Calculate start date based on timeframe
+    const now = new Date();
+    let startDate: Date;
+
+    switch (timeframe) {
+      case "1d":
+        startDate = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+        break;
+      case "7d":
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        break;
+      case "30d":
+        startDate = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+        break;
+      case "90d":
+        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+        break;
+      default:
+        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    }
+
+    // Get usage tracking data grouped by message and operation type
+    const usageData = await prisma.usageTracking.findMany({
+      where: {
+        createdAt: {
+          gte: startDate,
+        },
+      },
+      select: {
+        messageId: true,
+        operationType: true,
+        operationSubtype: true,
+        totalCost: true,
+        createdAt: true,
+      },
+      orderBy: {
+        createdAt: "asc",
+      },
+    });
+
+    // Group by messageId and operation type
+    const messageMap = new Map();
+    const operationTypes = new Set();
+    let messageCount = 0;
+
+    usageData.forEach((record) => {
+      const operationKey = record.operationSubtype || record.operationType;
+      operationTypes.add(operationKey);
+
+      if (!messageMap.has(record.messageId)) {
+        messageCount++;
+        messageMap.set(record.messageId, {
+          messageCount,
+          messageId: record.messageId,
+          createdAt: record.createdAt.toISOString(),
+        });
+      }
+
+      const messageData = messageMap.get(record.messageId);
+      if (!messageData[operationKey]) {
+        messageData[operationKey] = 0;
+      }
+      messageData[operationKey] += record.totalCost;
+    });
+
+    const timelineData = Array.from(messageMap.values()).sort((a, b) => 
+      new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+    );
 
     res.json({
       success: true,
       data: {
-        timeframe,
-        cumulativeData,
-        totalMessages: messageCount,
-        totalCost: cumulativeCost,
+        timeline: timelineData,
+        operationTypes: Array.from(operationTypes),
       },
     });
   })

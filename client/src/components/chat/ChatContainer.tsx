@@ -11,7 +11,8 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "../ui/dialog";
-import { AlertCircle, Plus, MessageSquare, Trash2 } from "lucide-react";
+import { AlertCircle, Plus, MessageSquare, Trash2, BarChart3 } from "lucide-react";
+import { Link } from "react-router-dom";
 import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { CostCounter } from "./CostCounter";
@@ -207,6 +208,13 @@ export function ChatContainer() {
             </p>
           </div>
           <div className="flex gap-2">
+            <Link to="/dashboard">
+              <Button variant="outline" size="sm">
+                <BarChart3 className="mr-2 w-4 h-4" />
+                Dashboard
+              </Button>
+            </Link>
+            
             <Button
               onClick={createNewConversation}
               disabled={isLoading}
