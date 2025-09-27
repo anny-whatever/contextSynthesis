@@ -329,7 +329,8 @@ router.get(
         startDate.setDate(now.getDate() - 7);
     }
 
-    const topUsers = await prisma.usageTracking.groupBy({
+    // Get aggregated usage data
+    const topUsersData = await prisma.usageTracking.groupBy({
       by: ['userId'],
       where: {
         createdAt: {
@@ -342,7 +343,8 @@ router.get(
       _sum: {
         totalCost: true,
         inputTokens: true,
-        outputTokens: true
+        outputTokens: true,
+        duration: true
       },
       orderBy: {
         _sum: {
@@ -352,16 +354,53 @@ router.get(
       take: Number(limit)
     });
 
+    // Get user details and additional metrics
+    const topUsersWithDetails = await Promise.all(
+      topUsersData.map(async (userData: any) => {
+        const user = await prisma.user.findUnique({
+          where: { id: userData.userId },
+          select: { id: true, email: true, name: true }
+        });
+
+        // Get additional metrics for this user
+        const additionalMetrics = await prisma.usageTracking.aggregate({
+          where: {
+            userId: userData.userId,
+            createdAt: { gte: startDate }
+          },
+          _count: {
+            conversationId: true
+          }
+        });
+
+        // Get unique conversation count
+        const conversationCount = await prisma.usageTracking.findMany({
+          where: {
+            userId: userData.userId,
+            createdAt: { gte: startDate }
+          },
+          select: { conversationId: true },
+          distinct: ['conversationId']
+        });
+
+        return {
+          userId: userData.userId,
+          user: user || { id: userData.userId, email: 'Unknown User', name: null },
+          totalUsage: userData._count.id,
+          totalCost: userData._sum.totalCost || 0,
+          totalTokens: (userData._sum.inputTokens || 0) + (userData._sum.outputTokens || 0),
+          messageCount: userData._count.id,
+          conversationCount: conversationCount.length,
+          avgResponseTime: userData._sum.duration ? (userData._sum.duration / userData._count.id) : 0
+        };
+      })
+    );
+
     res.json({
       success: true,
       data: {
         timeframe,
-        topUsers: topUsers.map((user: any) => ({
-          userId: user.userId,
-          usageCount: user._count.id,
-          totalCost: user._sum.totalCost || 0,
-          totalTokens: (user._sum.inputTokens || 0) + (user._sum.outputTokens || 0)
-        }))
+        topUsers: topUsersWithDetails
       }
     });
   })

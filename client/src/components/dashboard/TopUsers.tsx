@@ -68,14 +68,16 @@ export function TopUsers({ timeframe, limit = 10 }: TopUsersProps) {
   };
 
   const getUserInitials = (user: UserData['user']) => {
+    if (!user) return 'UN';
     if (user.name) {
       return user.name.split(' ').map(n => n[0]).join('').toUpperCase();
     }
-    return user.email.substring(0, 2).toUpperCase();
+    return user.email ? user.email.substring(0, 2).toUpperCase() : 'UN';
   };
 
   const getUserDisplayName = (user: UserData['user']) => {
-    return user.name || user.email;
+    if (!user) return 'Unknown User';
+    return user.name || user.email || 'Unknown User';
   };
 
   const getRankIcon = (index: number) => {
