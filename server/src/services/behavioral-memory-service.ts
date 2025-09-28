@@ -173,6 +173,13 @@ Return your response as JSON:
 }
 
 CRITICAL: The "memory" field must be a plain text string describing the user's behavioral patterns, NOT a structured JSON object.
+CRITICAL: The "memory" should not have any reference of the previous conversation as this memory is to drive the conversation so its about specific generals and not references to the previous conversations
+CRITICAL: The response should have the attributes below
+- Communication Style: formal/casual, brief/detailed, direct/empathetic
+- Tone Preferences: professional, friendly, technical, conversational
+- Response Format: bullet points, explanations, examples, step-by-step
+- Technical Level: beginner, intermediate, expert
+- Behavioral Patterns: question types, interaction style, preferences
 
 If no behavioral cues are detected in the prompt, return the existing memory unchanged with empty changes array.`;
 
