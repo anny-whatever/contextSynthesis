@@ -8,6 +8,7 @@ export interface AgentConfig {
   systemPrompt: string;
   enableTools: boolean;
   maxConversationHistory: number;
+  enableDetailedToolLogging?: boolean;
 }
 
 export interface ConversationContext {

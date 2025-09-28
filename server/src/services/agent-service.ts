@@ -584,6 +584,7 @@ You are a conversational AI assistant with excellent memory and natural communic
 
   /**
    * Process tool results with rich context and explanations
+   * Enhanced to handle multi-tool execution with intelligent synthesis
    */
   private async processToolResultsWithContext(
     toolResults: ToolUsageContext[],
@@ -593,6 +594,16 @@ You are a conversational AI assistant with excellent memory and natural communic
   ): Promise<any[]> {
     const contextualizedResults = [];
 
+    // Check if this is a multi-tool execution from smart context service
+    const isMultiToolExecution = toolResults.length > 1 || 
+      (toolResults.length === 1 && intentAnalysis.toolExecutionPlan?.length > 1);
+
+    if (isMultiToolExecution) {
+      // Handle multi-tool execution with intelligent synthesis
+      return this.processMultiToolResults(toolResults, userQuery, intentAnalysis, toolCalls);
+    }
+
+    // Legacy single-tool processing
     for (let i = 0; i < toolResults.length; i++) {
       const result = toolResults[i];
       const toolCall = toolCalls[i];
@@ -719,6 +730,303 @@ You are a conversational AI assistant with excellent memory and natural communic
     }
 
     return contextualizedResults;
+  }
+
+  /**
+   * Process multi-tool execution results with intelligent synthesis and prioritization
+   */
+  private async processMultiToolResults(
+    toolResults: ToolUsageContext[],
+    userQuery: string,
+    intentAnalysis: IntentAnalysisResult,
+    toolCalls: any[]
+  ): Promise<any[]> {
+    const contextualizedResults = [];
+    const successfulResults = toolResults.filter(r => r.success);
+    const failedResults = toolResults.filter(r => !r.success);
+    
+    // Categorize tools by priority and type
+    const toolsByPriority = this.categorizeToolsByPriority(toolResults, intentAnalysis);
+    const criticalToolsFailed = toolsByPriority.critical.some(t => !t.success);
+    
+    console.log(`🔄 [MULTI-TOOL] Processing ${toolResults.length} tool results:`, {
+      successful: successfulResults.length,
+      failed: failedResults.length,
+      criticalFailed: criticalToolsFailed,
+      queryType: intentAnalysis.queryType,
+      strategy: intentAnalysis.executionStrategy
+    });
+
+    // Create synthesized result message
+    const synthesizedMessage = this.createSynthesizedToolMessage({
+      userRequest: userQuery,
+      intentAnalysis,
+      toolResults,
+      successfulResults,
+      failedResults,
+      toolsByPriority,
+      criticalToolsFailed
+    });
+
+    // Create a single synthesized tool result
+    contextualizedResults.push({
+      role: "tool" as const,
+      tool_call_id: toolCalls[0]?.id || "multi_tool_synthesis",
+      content: synthesizedMessage,
+    });
+
+    // Add individual tool results for debugging/transparency if needed
+     if (this.config.enableDetailedToolLogging) {
+       for (let i = 0; i < toolResults.length; i++) {
+         const result = toolResults[i];
+         if (!result) continue; // Skip undefined results
+         
+         const toolCall = toolCalls[i];
+         const toolCallId = toolCall?.id || `tool_${i}_detail`;
+
+         const detailMessage = this.createDetailedToolMessage(result, userQuery, intentAnalysis);
+         
+         contextualizedResults.push({
+           role: "tool" as const,
+           tool_call_id: toolCallId,
+           content: detailMessage,
+         });
+       }
+     }
+
+    return contextualizedResults;
+  }
+
+  /**
+   * Categorize tools by priority based on execution plan
+   */
+  private categorizeToolsByPriority(
+    toolResults: ToolUsageContext[],
+    intentAnalysis: IntentAnalysisResult
+  ): {
+    critical: ToolUsageContext[];
+    high: ToolUsageContext[];
+    medium: ToolUsageContext[];
+    low: ToolUsageContext[];
+  } {
+    const categories = {
+      critical: [] as ToolUsageContext[],
+      high: [] as ToolUsageContext[],
+      medium: [] as ToolUsageContext[],
+      low: [] as ToolUsageContext[]
+    };
+
+    for (const result of toolResults) {
+      // Find the corresponding tool plan to get priority
+      const toolPlan = intentAnalysis.toolExecutionPlan?.find(
+        plan => plan.toolName === result.toolName
+      );
+      
+      const priority = toolPlan?.priority || 'medium';
+      categories[priority].push(result);
+    }
+
+    return categories;
+  }
+
+  /**
+   * Create synthesized message from multiple tool results
+   */
+  private createSynthesizedToolMessage(context: {
+    userRequest: string;
+    intentAnalysis: IntentAnalysisResult;
+    toolResults: ToolUsageContext[];
+    successfulResults: ToolUsageContext[];
+    failedResults: ToolUsageContext[];
+    toolsByPriority: {
+      critical: ToolUsageContext[];
+      high: ToolUsageContext[];
+      medium: ToolUsageContext[];
+      low: ToolUsageContext[];
+    };
+    criticalToolsFailed: boolean;
+  }): string {
+    const {
+      userRequest,
+      intentAnalysis,
+      toolResults,
+      successfulResults,
+      failedResults,
+      toolsByPriority,
+      criticalToolsFailed
+    } = context;
+
+    let message = `🎯 MULTI-TOOL EXECUTION RESULTS\n`;
+    message += `Query: "${userRequest}"\n`;
+    message += `Strategy: ${intentAnalysis.executionStrategy} execution\n`;
+    message += `Query Type: ${intentAnalysis.queryType}\n`;
+    message += `Tools Executed: ${toolResults.length} (${successfulResults.length} successful, ${failedResults.length} failed)\n\n`;
+
+    // Handle critical tool failures
+    if (criticalToolsFailed) {
+      message += `⚠️ CRITICAL TOOL FAILURE DETECTED\n`;
+      const failedCritical = toolsByPriority.critical.filter(t => !t.success);
+      message += `Failed Critical Tools: ${failedCritical.map(t => t.toolName).join(', ')}\n`;
+      message += `INSTRUCTION: Inform the user that some essential information could not be retrieved. `;
+      message += `Provide what information is available from successful tools and suggest alternative approaches.\n\n`;
+    }
+
+    // Synthesize successful results by priority
+    if (successfulResults.length > 0) {
+      message += `✅ SYNTHESIZED RESULTS - USE ALL INFORMATION BELOW\n\n`;
+
+      // Process critical results first
+      if (toolsByPriority.critical.some(t => t.success)) {
+        message += `🔴 CRITICAL INFORMATION:\n`;
+        const successfulCritical = toolsByPriority.critical.filter(t => t.success);
+        for (const result of successfulCritical) {
+          message += this.formatToolResultForSynthesis(result, 'critical');
+        }
+        message += `\n`;
+      }
+
+      // Process high priority results
+      if (toolsByPriority.high.some(t => t.success)) {
+        message += `🟠 HIGH PRIORITY INFORMATION:\n`;
+        const successfulHigh = toolsByPriority.high.filter(t => t.success);
+        for (const result of successfulHigh) {
+          message += this.formatToolResultForSynthesis(result, 'high');
+        }
+        message += `\n`;
+      }
+
+      // Process medium and low priority results
+      const otherSuccessful = [
+        ...toolsByPriority.medium.filter(t => t.success),
+        ...toolsByPriority.low.filter(t => t.success)
+      ];
+      
+      if (otherSuccessful.length > 0) {
+        message += `🟡 ADDITIONAL INFORMATION:\n`;
+        for (const result of otherSuccessful) {
+          message += this.formatToolResultForSynthesis(result, 'additional');
+        }
+        message += `\n`;
+      }
+
+      // Provide synthesis instructions
+      message += `📋 SYNTHESIS INSTRUCTIONS:\n`;
+      message += this.generateSynthesisInstructions(intentAnalysis, successfulResults);
+    }
+
+    // Handle complete failure
+    if (successfulResults.length === 0) {
+      message += `❌ ALL TOOLS FAILED\n`;
+      message += `INSTRUCTION: Inform the user that the requested information could not be retrieved. `;
+      message += `Suggest alternative approaches or rephrasing their request.\n\n`;
+      
+      message += `Failed Tools:\n`;
+      for (const result of failedResults) {
+        message += `- ${result.toolName}: ${result.error}\n`;
+      }
+    }
+
+    return message;
+  }
+
+  /**
+   * Format individual tool result for synthesis
+   */
+  private formatToolResultForSynthesis(result: ToolUsageContext, priority: string): string {
+    let formatted = `• ${result.toolName.toUpperCase()}:\n`;
+    
+    const resultCount = this.getResultCount(result.output);
+    formatted += `  Found: ${resultCount} result${resultCount === 1 ? '' : 's'}\n`;
+    
+    const timeframe = this.extractTimeframe(result.toolName, result.output);
+    if (timeframe) {
+      formatted += `  Timeframe: ${timeframe}\n`;
+    }
+    
+    const summary = this.generateResultsSummary(result.toolName, result.output);
+    formatted += `  Summary: ${summary}\n`;
+    
+    // Include actual data for AI to reference
+    formatted += `  Data: ${JSON.stringify(result.output, null, 2)}\n\n`;
+    
+    return formatted;
+  }
+
+  /**
+   * Generate synthesis instructions based on query type and results
+   */
+  private generateSynthesisInstructions(
+    intentAnalysis: IntentAnalysisResult,
+    successfulResults: ToolUsageContext[]
+  ): string {
+    let instructions = '';
+
+    switch (intentAnalysis.queryType) {
+      case 'hybrid_temporal_current':
+        instructions = `Combine historical conversation data with current web information. `;
+        instructions += `Present a comprehensive answer that shows both past context and current updates. `;
+        instructions += `Clearly distinguish between historical and current information.`;
+        break;
+
+      case 'hybrid_topic_current':
+        instructions = `Merge conversation history about the topic with current information. `;
+        instructions += `Provide a complete picture that builds on past discussions and adds new insights.`;
+        break;
+
+      case 'comprehensive':
+        instructions = `Synthesize all available information sources to provide the most complete answer possible. `;
+        instructions += `Prioritize critical information and organize by relevance to the user's query.`;
+        break;
+
+      case 'temporal_only':
+        instructions = `Focus on the temporal/historical aspects. Use conversation history and date-based searches `;
+        instructions += `to provide context about past events or discussions.`;
+        break;
+
+      case 'current_only':
+        instructions = `Provide current, up-to-date information. Use web search results and current data `;
+        instructions += `to answer the user's question with the latest information available.`;
+        break;
+
+      default:
+        instructions = `Combine all available information to provide a comprehensive answer. `;
+        instructions += `Prioritize the most relevant and reliable sources.`;
+    }
+
+    instructions += `\n\nKey Topics: ${intentAnalysis.keyTopics.join(', ')}\n`;
+    instructions += `Available Sources: ${successfulResults.map(r => r.toolName).join(', ')}\n`;
+    
+    return instructions;
+  }
+
+  /**
+   * Create detailed tool message for individual tool results (debugging)
+   */
+  private createDetailedToolMessage(
+    result: ToolUsageContext,
+    userQuery: string,
+    intentAnalysis: IntentAnalysisResult
+  ): string {
+    let message = `🔧 DETAILED TOOL RESULT\n`;
+    message += `Tool: ${result.toolName}\n`;
+    message += `Success: ${result.success}\n`;
+    message += `Duration: ${result.duration}ms\n`;
+    
+    if (result.success) {
+      const resultCount = this.getResultCount(result.output);
+      message += `Results Found: ${resultCount}\n`;
+      
+      const timeframe = this.extractTimeframe(result.toolName, result.output);
+      if (timeframe) {
+        message += `Timeframe: ${timeframe}\n`;
+      }
+      
+      message += `\nData:\n${JSON.stringify(result.output, null, 2)}`;
+    } else {
+      message += `Error: ${result.error}\n`;
+    }
+    
+    return message;
   }
 
   /**
