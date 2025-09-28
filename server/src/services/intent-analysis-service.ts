@@ -35,12 +35,18 @@ export interface IntentAnalysisResult {
   compressedContext: string;
   analysisResult: any;
   needsHistoricalContext: boolean;
-  
+
   // NEW: AI-driven multi-tool execution
   toolExecutionPlan: ToolExecutionPlan[];
-  queryType: "simple" | "hybrid_temporal_current" | "hybrid_topic_current" | "comprehensive" | "temporal_only" | "current_only";
+  queryType:
+    | "simple"
+    | "hybrid_temporal_current"
+    | "hybrid_topic_current"
+    | "comprehensive"
+    | "temporal_only"
+    | "current_only";
   executionStrategy: "single" | "parallel" | "sequential" | "conditional";
-  
+
   // DEPRECATED: Keep for backward compatibility during transition
   contextRetrievalStrategy:
     | "none"
@@ -52,7 +58,7 @@ export interface IntentAnalysisResult {
   maxContextItems?: number;
   dateQuery?: string;
   includeHours?: boolean;
-  
+
   // Enhanced confidence scoring
   confidenceLevel: "high" | "medium" | "low";
   confidenceScore: number; // 0-1 scale
@@ -441,7 +447,7 @@ GUIDELINES:
           type: "json_schema",
           json_schema: {
             name: "intent_analysis",
-            strict: true,
+            strict: false, // Allow optional properties for AI flexibility
             schema: {
               type: "object",
               properties: {
@@ -498,55 +504,76 @@ GUIDELINES:
                     properties: {
                       toolName: {
                         type: "string",
-                        enum: ["semantic_topic_search", "date_based_topic_search", "web_search"],
-                        description: "Name of the tool to execute"
+                        enum: [
+                          "semantic_topic_search",
+                          "date_based_topic_search",
+                          "web_search",
+                        ],
+                        description: "Name of the tool to execute",
                       },
                       priority: {
                         type: "string",
                         enum: ["critical", "high", "medium", "low"],
-                        description: "Priority level for tool execution"
+                        description: "Priority level for tool execution",
                       },
                       required: {
                         type: "boolean",
-                        description: "Whether this tool is required for the query"
+                        description:
+                          "Whether this tool is required for the query",
                       },
                       reasoning: {
                         type: "string",
-                        description: "AI reasoning for why this tool is needed"
+                        description: "AI reasoning for why this tool is needed",
                       },
                       parameters: {
-                          type: "object",
-                          description: "Tool execution parameters - flexible object allowing various parameter combinations",
-                          additionalProperties: true
-                        },
+                        type: "object",
+                        description:
+                          "Tool execution parameters - flexible object for tool-specific parameters",
+                        additionalProperties: true, // Allow flexible parameters
+                      },
                       timeout: {
                         type: "integer",
-                        description: "Timeout in milliseconds for tool execution"
+                        description:
+                          "Timeout in milliseconds for tool execution",
                       },
                       retryCount: {
                         type: "integer",
-                        description: "Number of retries if tool fails"
+                        description: "Number of retries if tool fails",
                       },
                       fallbackTools: {
                         type: "array",
                         items: { type: "string" },
-                        description: "Alternative tools if this one fails"
-                      }
+                        description: "Alternative tools if this one fails",
+                      },
                     },
-                    required: ["toolName", "priority", "required", "reasoning", "parameters"],
-                    additionalProperties: false
+                    required: [
+                      "toolName",
+                      "priority",
+                      "required",
+                      "reasoning",
+                      "parameters",
+                    ],
+                    additionalProperties: true, // Allow additional tool properties for flexibility
                   },
-                  description: "AI-generated plan for tool execution"
+                  description: "AI-generated plan for tool execution",
                 },
                 queryType: {
                   type: "string",
-                  enum: ["simple", "hybrid_temporal_current", "hybrid_topic_current", "comprehensive", "temporal_only", "current_only"],
-                  description: "Type of query requiring specific tool combinations"
+                  enum: [
+                    "simple",
+                    "hybrid_temporal_current",
+                    "hybrid_topic_current",
+                    "comprehensive",
+                    "temporal_only",
+                    "current_only",
+                  ],
+                  description:
+                    "Type of query requiring specific tool combinations",
                 },
                 executionStrategy: {
                   type: "string",
                   enum: ["single", "parallel", "sequential", "conditional"],
-                  description: "Strategy for executing multiple tools"
+                  description: "Strategy for executing multiple tools",
                 },
               },
               required: [
@@ -555,14 +582,13 @@ GUIDELINES:
                 "relationshipToHistory",
                 "keyTopics",
                 "pendingQuestions",
-                "lastAssistantQuestion",
                 "compressedContext",
                 "needsHistoricalContext",
                 "toolExecutionPlan",
                 "queryType",
                 "executionStrategy",
               ],
-              additionalProperties: false,
+              additionalProperties: true, // Allow additional properties for future extensibility
             },
           },
         },
@@ -686,16 +712,19 @@ GUIDELINES:
         },
         needsHistoricalContext: true,
         // New AI-driven multi-tool execution fields with fallback values
-        toolExecutionPlan: [{
-          toolName: "semantic_topic_search",
-          priority: "medium",
-          required: true,
-          reasoning: "Fallback to basic semantic search due to analysis failure",
-          parameters: {
-            semanticSearchQueries: [currentPrompt],
-            maxContextItems: 5
-          }
-        }],
+        toolExecutionPlan: [
+          {
+            toolName: "semantic_topic_search",
+            priority: "medium",
+            required: true,
+            reasoning:
+              "Fallback to basic semantic search due to analysis failure",
+            parameters: {
+              semanticSearchQueries: [currentPrompt],
+              maxContextItems: 5,
+            },
+          },
+        ],
         queryType: "simple",
         executionStrategy: "single",
         // Legacy fields for backward compatibility
@@ -809,16 +838,18 @@ GUIDELINES:
       analysisResult: analysis.analysisResult,
       needsHistoricalContext: true, // Default assumption for stored analysis
       // New AI-driven multi-tool execution fields with default values
-      toolExecutionPlan: [{
-        toolName: "semantic_topic_search",
-        priority: "medium",
-        required: true,
-        reasoning: "Default semantic search for stored analysis",
-        parameters: {
-          semanticSearchQueries: [analysis.currentIntent],
-          maxContextItems: 5
-        }
-      }],
+      toolExecutionPlan: [
+        {
+          toolName: "semantic_topic_search",
+          priority: "medium",
+          required: true,
+          reasoning: "Default semantic search for stored analysis",
+          parameters: {
+            semanticSearchQueries: [analysis.currentIntent],
+            maxContextItems: 5,
+          },
+        },
+      ],
       queryType: "simple",
       executionStrategy: "single",
       // Legacy fields for backward compatibility
