@@ -20,6 +20,10 @@ export interface TopicSummaryResult {
   summaryLevel: number;
   topicRelevance: number;
   batchId: string;
+  sourceContext?: string;
+  pointIndex?: number;
+  parentTopic?: string;
+  structuredContent?: boolean;
 }
 
 export interface SummaryBatchResult {
@@ -339,7 +343,7 @@ export class ConversationSummaryService {
       ? topic.relatedTopics
       : [];
 
-    return {
+    const result: TopicSummaryResult = {
       id: `topic_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
       topicName: topic.topicName,
       summaryText: topic.summary,
@@ -353,6 +357,22 @@ export class ConversationSummaryService {
       topicRelevance: topic.relevanceScore,
       batchId,
     };
+
+    // Add optional fields only if they exist
+    if (topic.sourceContext !== undefined) {
+      result.sourceContext = topic.sourceContext;
+    }
+    if (topic.pointIndex !== undefined) {
+      result.pointIndex = topic.pointIndex;
+    }
+    if (topic.parentTopic !== undefined) {
+      result.parentTopic = topic.parentTopic;
+    }
+    if (topic.structuredContent !== undefined) {
+      result.structuredContent = topic.structuredContent;
+    }
+
+    return result;
   }
 
   private async storeTopicSummaries(
@@ -365,17 +385,31 @@ export class ConversationSummaryService {
       const createdSummaries = [];
 
       for (const summary of summaries) {
+        const createData: any = {
+          conversationId,
+          topicName: summary.topicName,
+          summaryText: summary.summaryText,
+          relatedTopics: summary.relatedTopics,
+          messageRange: summary.messageRange,
+          summaryLevel: summary.summaryLevel,
+          topicRelevance: summary.topicRelevance,
+          batchId: summary.batchId,
+          structuredContent: summary.structuredContent || false,
+        };
+
+        // Add optional fields only if they exist
+        if (summary.sourceContext !== undefined) {
+          createData.sourceContext = summary.sourceContext;
+        }
+        if (summary.pointIndex !== undefined) {
+          createData.pointIndex = summary.pointIndex;
+        }
+        if (summary.parentTopic !== undefined) {
+          createData.parentTopic = summary.parentTopic;
+        }
+
         const createdSummary = await tx.conversationSummary.create({
-          data: {
-            conversationId,
-            topicName: summary.topicName,
-            summaryText: summary.summaryText,
-            relatedTopics: summary.relatedTopics,
-            messageRange: summary.messageRange,
-            summaryLevel: summary.summaryLevel,
-            topicRelevance: summary.topicRelevance,
-            batchId: summary.batchId,
-          },
+          data: createData,
         });
         createdSummaries.push(createdSummary);
       }

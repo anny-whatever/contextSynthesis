@@ -77,23 +77,29 @@ model ToolUsage {
 }
 
 model ConversationSummary {
-  id             String                 @id @default(cuid())
-  conversationId String
-  topicName      String
-  summaryText    String
-  relatedTopics  Json?
-  messageRange   Json
-  summaryLevel   Int                    @default(1)
-  topicRelevance Float                  @default(1.0)
-  batchId        String?
-  createdAt      DateTime               @default(now())
-  updatedAt      DateTime               @updatedAt
-  topicEmbedding Unsupported("vector")?
-  conversation   Conversation           @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  messages       Message[]
+  id               String                 @id @default(cuid())
+  conversationId   String
+  topicName        String
+  summaryText      String
+  relatedTopics    Json?
+  messageRange     Json
+  summaryLevel     Int                    @default(1)
+  topicRelevance   Float                  @default(1.0)
+  batchId          String?
+  sourceContext    String?                @default("mixed") // 'user_prompt', 'ai_response', 'mixed'
+  pointIndex       Int?                   // Index of the point in structured content
+  parentTopic      String?                // Reference to parent topic for hierarchical relationships
+  structuredContent Boolean               @default(false) // Whether this topic came from structured content
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+  topicEmbedding   Unsupported("vector")?
+  conversation     Conversation           @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  messages         Message[]
 
   @@index([conversationId, batchId])
   @@index([topicName])
+  @@index([structuredContent])
+  @@index([parentTopic])
   @@map("conversation_summaries")
 }
 

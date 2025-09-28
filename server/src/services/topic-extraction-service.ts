@@ -8,6 +8,10 @@ export interface ExtractedTopic {
   relatedTopics: string[];
   keyMessages: string[];
   summary: string;
+  sourceContext?: 'user_prompt' | 'ai_response' | 'mixed';
+  pointIndex?: number;
+  parentTopic?: string;
+  structuredContent?: boolean;
 }
 
 export interface TopicExtractionResult {
@@ -44,15 +48,25 @@ export class TopicExtractionService {
       .map((msg) => `${msg.role}: ${msg.content}`)
       .join("\n\n");
 
-    const systemPrompt = `You are an expert conversation analyst. Your task is to extract granular, focused topics from conversations and create comprehensive, detailed summaries.
+    const systemPrompt = `You are an expert conversation analyst with advanced structured content detection capabilities. Your task is to extract granular, focused topics from conversations, with special attention to structured content like bullet points, numbered lists, and distinct sections.
 
-IMPORTANT GUIDELINES:
-1. Extract GRANULAR topics, not broad categories
-2. Each topic should be specific and focused
-3. Aim for 3-8 topics depending on conversation complexity
-4. Topics should be actionable and meaningful
-5. Avoid generic topics like "general discussion"
-6. Focus on specific problems, solutions, concepts, or decisions discussed
+STRUCTURED CONTENT DETECTION:
+1. **AUTOMATICALLY DETECT** structured content patterns:
+   - Numbered lists (1., 2., 3., etc.)
+   - Bullet points (-, •, *, etc.)
+   - Clear sections with distinct topics
+   - Multiple distinct items/events/concepts in responses
+
+2. **GRANULAR EXTRACTION STRATEGY**:
+   - For structured content: Create SEPARATE topics for each significant point/item
+   - For unstructured content: Extract 3-8 focused topics as usual
+   - Always include user prompt context in topic analysis
+
+3. **TOPIC CREATION RULES**:
+   - Each distinct point in structured content = separate topic
+   - Include source context (user_prompt, ai_response, or mixed)
+   - Mark structured content topics with pointIndex
+   - Create parent-child relationships when appropriate
 
 CRITICAL SUMMARY REQUIREMENTS:
 Your summaries MUST be comprehensive and detailed, capturing ALL important information including:
@@ -71,6 +85,10 @@ For each topic, provide:
 - relatedTopics: Array of closely connected topic names
 - keyMessages: Array of the most important message excerpts for this topic (max 3)
 - summary: COMPREHENSIVE and DETAILED summary (5-10 sentences minimum) that captures ALL relevant dates, events, persons, personal details, numbers, statistics, and specific information discussed about this topic. Do NOT summarize briefly - include ALL important details, names, numbers, dates, and context.
+- sourceContext: "user_prompt", "ai_response", or "mixed" based on where the topic originated
+- pointIndex: (optional) If this topic comes from a specific point in structured content, provide the index (0, 1, 2, etc.)
+- parentTopic: (optional) If this is a sub-topic, provide the parent topic name
+- structuredContent: true if this topic was extracted from structured content (lists, bullets, etc.)
 
 Return a JSON object with an array of topics.`;
 
@@ -78,7 +96,12 @@ Return a JSON object with an array of topics.`;
 
 ${conversationText}
 
-Extract focused, specific topics that capture the granular details of what was discussed. Each topic should represent a distinct concept, problem, or area of focus within the conversation.
+STRUCTURED CONTENT ANALYSIS:
+1. **SCAN FOR PATTERNS**: Look for numbered lists, bullet points, distinct sections, or multiple separate items/events
+2. **GRANULAR EXTRACTION**: If you find structured content (like news items, feature lists, step-by-step processes), create SEPARATE topics for each significant point
+3. **CONTEXT PRESERVATION**: Always consider the user's original question/prompt when creating topics
+
+EXAMPLE: If user asks "Indian news yesterday" and AI responds with 5 news items, create 5 separate news topics + 1 overall context topic.
 
 CRITICAL: For each topic's summary, you MUST include ALL specific details mentioned in the conversation:
 - Extract and include ALL dates, times, deadlines, and temporal references
@@ -88,6 +111,12 @@ CRITICAL: For each topic's summary, you MUST include ALL specific details mentio
 - Document ALL events, meetings, appointments, milestones, and incidents
 - Preserve ALL technical specifications, requirements, and precise descriptions
 - Include ALL context, reasons, motivations, implications, and outcomes
+
+TOPIC CREATION STRATEGY:
+- For structured responses: Create individual topics for each point/item/section
+- Mark each with appropriate sourceContext, pointIndex, and structuredContent flags
+- Include user prompt context in topic names for better semantic search
+- Create meaningful relationships between related topics
 
 Do NOT create brief summaries. Create comprehensive, detailed summaries that preserve all the important information discussed for each topic.`;
 
@@ -146,6 +175,10 @@ Do NOT create brief summaries. Create comprehensive, detailed summaries that pre
             ? topic.keyMessages.slice(0, 3)
             : [],
           summary: topic.summary,
+          sourceContext: topic.sourceContext || 'mixed',
+          pointIndex: typeof topic.pointIndex === 'number' ? topic.pointIndex : undefined,
+          parentTopic: topic.parentTopic || undefined,
+          structuredContent: Boolean(topic.structuredContent),
         }));
 
       return {
