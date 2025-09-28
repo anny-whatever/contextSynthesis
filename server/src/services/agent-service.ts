@@ -138,7 +138,18 @@ You are a conversational AI assistant with excellent memory and natural communic
 - Answer naturally and conversationally first
 - Provide detailed explanations only when asked or when the topic is complex
 - Ask follow-up questions to better understand what the user needs
-- Be helpful, accurate, and maintain the flow of our ongoing conversation`;
+- Be helpful, accurate, and maintain the flow of our ongoing conversation
+
+## TOOL USAGE GUIDELINES
+- Use tools proactively to gather information when helpful
+- Combine tool results with immediate context for complete understanding
+- If a tool result is not directly relevant, ask for clarification or try a different search term
+- Don't assume tools will always find the exact information needed
+- If a tool fails to provide useful information, don't hesitate to ask for help or try a different approach
+
+## IMPORTANT NOTICE:
+- The timestamp provided at the bottom of the summary topics are the time when the topic was last discussed in the conversation and not of the event that was discussed. That timestamp is an isolated information about the conversation between the user and the AI assistant and has nothing to do with the even or topic discussed. So if you see timestamps like this "'**Timestamp**: The conversation about this topic happened 0 days from today, that is on 28/09/2025 and 17:11'", treat them like isolated information and do not add it or relate it to the "Content" of the topic"
+`;
   }
 
   async processMessage(request: AgentRequest): Promise<AgentResponse> {
@@ -600,12 +611,19 @@ You are a conversational AI assistant with excellent memory and natural communic
     const contextualizedResults = [];
 
     // Check if this is a multi-tool execution from smart context service
-    const isMultiToolExecution = toolResults.length > 1 || 
-      (toolResults.length === 1 && intentAnalysis.toolExecutionPlan?.length > 1);
+    const isMultiToolExecution =
+      toolResults.length > 1 ||
+      (toolResults.length === 1 &&
+        intentAnalysis.toolExecutionPlan?.length > 1);
 
     if (isMultiToolExecution) {
       // Handle multi-tool execution with intelligent synthesis
-      return this.processMultiToolResults(toolResults, userQuery, intentAnalysis, toolCalls);
+      return this.processMultiToolResults(
+        toolResults,
+        userQuery,
+        intentAnalysis,
+        toolCalls
+      );
     }
 
     // Legacy single-tool processing
@@ -747,20 +765,28 @@ You are a conversational AI assistant with excellent memory and natural communic
     toolCalls: any[]
   ): Promise<any[]> {
     const contextualizedResults = [];
-    const successfulResults = toolResults.filter(r => r.success);
-    const failedResults = toolResults.filter(r => !r.success);
-    
+    const successfulResults = toolResults.filter((r) => r.success);
+    const failedResults = toolResults.filter((r) => !r.success);
+
     // Categorize tools by priority and type
-    const toolsByPriority = this.categorizeToolsByPriority(toolResults, intentAnalysis);
-    const criticalToolsFailed = toolsByPriority.critical.some(t => !t.success);
-    
-    console.log(`🔄 [MULTI-TOOL] Processing ${toolResults.length} tool results:`, {
-      successful: successfulResults.length,
-      failed: failedResults.length,
-      criticalFailed: criticalToolsFailed,
-      queryType: intentAnalysis.queryType,
-      strategy: intentAnalysis.executionStrategy
-    });
+    const toolsByPriority = this.categorizeToolsByPriority(
+      toolResults,
+      intentAnalysis
+    );
+    const criticalToolsFailed = toolsByPriority.critical.some(
+      (t) => !t.success
+    );
+
+    console.log(
+      `🔄 [MULTI-TOOL] Processing ${toolResults.length} tool results:`,
+      {
+        successful: successfulResults.length,
+        failed: failedResults.length,
+        criticalFailed: criticalToolsFailed,
+        queryType: intentAnalysis.queryType,
+        strategy: intentAnalysis.executionStrategy,
+      }
+    );
 
     // Create synthesized result message
     const synthesizedMessage = this.createSynthesizedToolMessage({
@@ -770,30 +796,38 @@ You are a conversational AI assistant with excellent memory and natural communic
       successfulResults,
       failedResults,
       toolsByPriority,
-      criticalToolsFailed
+      criticalToolsFailed,
     });
 
     // Create individual tool results for each tool call - REQUIRED by OpenAI API
     for (let i = 0; i < toolCalls.length; i++) {
       const toolCall = toolCalls[i];
       const result = toolResults[i];
-      
+
       if (!toolCall?.id) {
         console.warn(`⚠️ [TOOL-CALL] Missing tool call ID for index ${i}`);
         continue;
       }
 
       let content: string;
-      
+
       if (result && result.success) {
         // Use detailed message for successful results
-        content = this.createDetailedToolMessage(result, userQuery, intentAnalysis);
+        content = this.createDetailedToolMessage(
+          result,
+          userQuery,
+          intentAnalysis
+        );
       } else if (result && !result.success) {
         // Create error message for failed results
-        content = `Tool execution failed: ${result.error || 'Unknown error'}. Tool: ${result.toolName || 'unknown'}`;
+        content = `Tool execution failed: ${
+          result.error || "Unknown error"
+        }. Tool: ${result.toolName || "unknown"}`;
       } else {
         // Fallback for missing results
-        content = `Tool execution completed but no result data available for ${toolCall.function?.name || 'unknown tool'}.`;
+        content = `Tool execution completed but no result data available for ${
+          toolCall.function?.name || "unknown tool"
+        }.`;
       }
 
       contextualizedResults.push({
@@ -804,7 +838,11 @@ You are a conversational AI assistant with excellent memory and natural communic
     }
 
     // Add synthesized summary as additional context if multiple tools were used
-    if (toolCalls.length > 1 && successfulResults.length > 0 && contextualizedResults.length > 0) {
+    if (
+      toolCalls.length > 1 &&
+      successfulResults.length > 0 &&
+      contextualizedResults.length > 0
+    ) {
       // Create a summary message using the first tool call ID (since we need to respond to all calls)
       // This provides the synthesized overview while maintaining API compliance
       const firstResult = contextualizedResults[0];
@@ -832,16 +870,16 @@ You are a conversational AI assistant with excellent memory and natural communic
       critical: [] as ToolUsageContext[],
       high: [] as ToolUsageContext[],
       medium: [] as ToolUsageContext[],
-      low: [] as ToolUsageContext[]
+      low: [] as ToolUsageContext[],
     };
 
     for (const result of toolResults) {
       // Find the corresponding tool plan to get priority
       const toolPlan = intentAnalysis.toolExecutionPlan?.find(
-        plan => plan.toolName === result.toolName
+        (plan) => plan.toolName === result.toolName
       );
-      
-      const priority = toolPlan?.priority || 'medium';
+
+      const priority = toolPlan?.priority || "medium";
       categories[priority].push(result);
     }
 
@@ -872,7 +910,7 @@ You are a conversational AI assistant with excellent memory and natural communic
       successfulResults,
       failedResults,
       toolsByPriority,
-      criticalToolsFailed
+      criticalToolsFailed,
     } = context;
 
     let message = `🎯 MULTI-TOOL EXECUTION RESULTS\n`;
@@ -884,8 +922,10 @@ You are a conversational AI assistant with excellent memory and natural communic
     // Handle critical tool failures
     if (criticalToolsFailed) {
       message += `⚠️ CRITICAL TOOL FAILURE DETECTED\n`;
-      const failedCritical = toolsByPriority.critical.filter(t => !t.success);
-      message += `Failed Critical Tools: ${failedCritical.map(t => t.toolName).join(', ')}\n`;
+      const failedCritical = toolsByPriority.critical.filter((t) => !t.success);
+      message += `Failed Critical Tools: ${failedCritical
+        .map((t) => t.toolName)
+        .join(", ")}\n`;
       message += `INSTRUCTION: Inform the user that some essential information could not be retrieved. `;
       message += `Provide what information is available from successful tools and suggest alternative approaches.\n\n`;
     }
@@ -895,42 +935,47 @@ You are a conversational AI assistant with excellent memory and natural communic
       message += `✅ SYNTHESIZED RESULTS - USE ALL INFORMATION BELOW\n\n`;
 
       // Process critical results first
-      if (toolsByPriority.critical.some(t => t.success)) {
+      if (toolsByPriority.critical.some((t) => t.success)) {
         message += `🔴 CRITICAL INFORMATION:\n`;
-        const successfulCritical = toolsByPriority.critical.filter(t => t.success);
+        const successfulCritical = toolsByPriority.critical.filter(
+          (t) => t.success
+        );
         for (const result of successfulCritical) {
-          message += this.formatToolResultForSynthesis(result, 'critical');
+          message += this.formatToolResultForSynthesis(result, "critical");
         }
         message += `\n`;
       }
 
       // Process high priority results
-      if (toolsByPriority.high.some(t => t.success)) {
+      if (toolsByPriority.high.some((t) => t.success)) {
         message += `🟠 HIGH PRIORITY INFORMATION:\n`;
-        const successfulHigh = toolsByPriority.high.filter(t => t.success);
+        const successfulHigh = toolsByPriority.high.filter((t) => t.success);
         for (const result of successfulHigh) {
-          message += this.formatToolResultForSynthesis(result, 'high');
+          message += this.formatToolResultForSynthesis(result, "high");
         }
         message += `\n`;
       }
 
       // Process medium and low priority results
       const otherSuccessful = [
-        ...toolsByPriority.medium.filter(t => t.success),
-        ...toolsByPriority.low.filter(t => t.success)
+        ...toolsByPriority.medium.filter((t) => t.success),
+        ...toolsByPriority.low.filter((t) => t.success),
       ];
-      
+
       if (otherSuccessful.length > 0) {
         message += `🟡 ADDITIONAL INFORMATION:\n`;
         for (const result of otherSuccessful) {
-          message += this.formatToolResultForSynthesis(result, 'additional');
+          message += this.formatToolResultForSynthesis(result, "additional");
         }
         message += `\n`;
       }
 
       // Provide synthesis instructions
       message += `📋 SYNTHESIS INSTRUCTIONS:\n`;
-      message += this.generateSynthesisInstructions(intentAnalysis, successfulResults);
+      message += this.generateSynthesisInstructions(
+        intentAnalysis,
+        successfulResults
+      );
     }
 
     // Handle complete failure
@@ -938,7 +983,7 @@ You are a conversational AI assistant with excellent memory and natural communic
       message += `❌ ALL TOOLS FAILED\n`;
       message += `INSTRUCTION: Inform the user that the requested information could not be retrieved. `;
       message += `Suggest alternative approaches or rephrasing their request.\n\n`;
-      
+
       message += `Failed Tools:\n`;
       for (const result of failedResults) {
         message += `- ${result.toolName}: ${result.error}\n`;
@@ -951,23 +996,28 @@ You are a conversational AI assistant with excellent memory and natural communic
   /**
    * Format individual tool result for synthesis
    */
-  private formatToolResultForSynthesis(result: ToolUsageContext, priority: string): string {
+  private formatToolResultForSynthesis(
+    result: ToolUsageContext,
+    priority: string
+  ): string {
     let formatted = `• ${result.toolName.toUpperCase()}:\n`;
-    
+
     const resultCount = this.getResultCount(result.output);
-    formatted += `  Found: ${resultCount} result${resultCount === 1 ? '' : 's'}\n`;
-    
+    formatted += `  Found: ${resultCount} result${
+      resultCount === 1 ? "" : "s"
+    }\n`;
+
     const timeframe = this.extractTimeframe(result.toolName, result.output);
     if (timeframe) {
       formatted += `  Timeframe: ${timeframe}\n`;
     }
-    
+
     const summary = this.generateResultsSummary(result.toolName, result.output);
     formatted += `  Summary: ${summary}\n`;
-    
+
     // Include actual data for AI to reference
     formatted += `  Data: ${JSON.stringify(result.output, null, 2)}\n\n`;
-    
+
     return formatted;
   }
 
@@ -978,31 +1028,31 @@ You are a conversational AI assistant with excellent memory and natural communic
     intentAnalysis: IntentAnalysisResult,
     successfulResults: ToolUsageContext[]
   ): string {
-    let instructions = '';
+    let instructions = "";
 
     switch (intentAnalysis.queryType) {
-      case 'hybrid_temporal_current':
+      case "hybrid_temporal_current":
         instructions = `Combine historical conversation data with current web information. `;
         instructions += `Present a comprehensive answer that shows both past context and current updates. `;
         instructions += `Clearly distinguish between historical and current information.`;
         break;
 
-      case 'hybrid_topic_current':
+      case "hybrid_topic_current":
         instructions = `Merge conversation history about the topic with current information. `;
         instructions += `Provide a complete picture that builds on past discussions and adds new insights.`;
         break;
 
-      case 'comprehensive':
+      case "comprehensive":
         instructions = `Synthesize all available information sources to provide the most complete answer possible. `;
         instructions += `Prioritize critical information and organize by relevance to the user's query.`;
         break;
 
-      case 'temporal_only':
+      case "temporal_only":
         instructions = `Focus on the temporal/historical aspects. Use conversation history and date-based searches `;
         instructions += `to provide context about past events or discussions.`;
         break;
 
-      case 'current_only':
+      case "current_only":
         instructions = `Provide current, up-to-date information. Use web search results and current data `;
         instructions += `to answer the user's question with the latest information available.`;
         break;
@@ -1012,9 +1062,11 @@ You are a conversational AI assistant with excellent memory and natural communic
         instructions += `Prioritize the most relevant and reliable sources.`;
     }
 
-    instructions += `\n\nKey Topics: ${intentAnalysis.keyTopics.join(', ')}\n`;
-    instructions += `Available Sources: ${successfulResults.map(r => r.toolName).join(', ')}\n`;
-    
+    instructions += `\n\nKey Topics: ${intentAnalysis.keyTopics.join(", ")}\n`;
+    instructions += `Available Sources: ${successfulResults
+      .map((r) => r.toolName)
+      .join(", ")}\n`;
+
     return instructions;
   }
 
@@ -1030,21 +1082,21 @@ You are a conversational AI assistant with excellent memory and natural communic
     message += `Tool: ${result.toolName}\n`;
     message += `Success: ${result.success}\n`;
     message += `Duration: ${result.duration}ms\n`;
-    
+
     if (result.success) {
       const resultCount = this.getResultCount(result.output);
       message += `Results Found: ${resultCount}\n`;
-      
+
       const timeframe = this.extractTimeframe(result.toolName, result.output);
       if (timeframe) {
         message += `Timeframe: ${timeframe}\n`;
       }
-      
+
       message += `\nData:\n${JSON.stringify(result.output, null, 2)}`;
     } else {
       message += `Error: ${result.error}\n`;
     }
-    
+
     return message;
   }
 
