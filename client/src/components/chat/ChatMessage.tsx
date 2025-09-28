@@ -21,9 +21,9 @@ export function ChatMessage({ message }: ChatMessageProps) {
     >
       {/* Avatar for assistant (left side) */}
       {isAssistant && (
-        <Avatar className="h-8 w-8 mt-1">
+        <Avatar className="mt-1 w-8 h-8">
           <AvatarFallback className="bg-primary text-primary-foreground">
-            <Bot className="h-4 w-4" />
+            <Bot className="w-4 h-4" />
           </AvatarFallback>
         </Avatar>
       )}
@@ -69,7 +69,7 @@ export function ChatMessage({ message }: ChatMessageProps) {
         )}
 
         {/* Timestamp */}
-        <div className="text-xs text-muted-foreground mt-1">
+        <div className="mt-1 text-xs text-muted-foreground">
           {new Date(message.timestamp).toLocaleTimeString([], {
             hour: "2-digit",
             minute: "2-digit",
@@ -79,9 +79,9 @@ export function ChatMessage({ message }: ChatMessageProps) {
 
       {/* Avatar for user (right side) */}
       {isUser && (
-        <Avatar className="h-8 w-8 mt-1">
+        <Avatar className="mt-1 w-8 h-8">
           <AvatarFallback className="bg-secondary text-secondary-foreground">
-            <User className="h-4 w-4" />
+            <User className="w-4 h-4" />
           </AvatarFallback>
         </Avatar>
       )}

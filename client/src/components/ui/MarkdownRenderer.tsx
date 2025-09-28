@@ -15,13 +15,14 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
   content,
   className,
 }) => {
-  // Preprocess content to convert square bracket math notation to dollar sign notation
+  // Preprocess content to convert LaTeX bracket notation to dollar sign notation
   const preprocessMath = (text: string): string => {
-    // Convert block math: [ ... ] on its own line to $$ ... $$
-    text = text.replace(/^\s*\[\s*(.*?)\s*\]\s*$/gm, "$$$$1$$");
+    // Convert block math: \[ ... \] on its own line to $$ ... $$
+    // Use [\s\S]*? to capture multi-line expressions including newlines
+    text = text.replace(/^\s*\\\[\s*([\s\S]*?)\s*\\\]\s*$/gm, (_, expr) => `$$${expr}$$`);
 
-    // Convert inline math: [ ... ] to $ ... $
-    text = text.replace(/\[\s*(.*?)\s*\]/g, "$$$1$$");
+    // Convert inline math: \[ ... \] to $ ... $ (only single line, no newlines)
+    text = text.replace(/\\\[\s*([^\[\]\n]+?)\s*\\\]/g, (_, expr) => `$${expr}$`);
 
     return text;
   };
