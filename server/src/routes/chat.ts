@@ -117,9 +117,25 @@ router.get(
       });
     }
 
+    // Transform conversation messages to match frontend expected structure
+    const transformedConversation = {
+      ...conversation,
+      messages: conversation.messages.map(message => ({
+        ...message,
+        toolUsages: message.toolUsages.map(toolUsage => ({
+          toolName: toolUsage.toolName,
+          input: toolUsage.input,
+          output: toolUsage.output,
+          success: toolUsage.status === 'COMPLETED',
+          duration: toolUsage.duration,
+          error: toolUsage.error,
+        })),
+      })),
+    };
+
     return res.json({
       success: true,
-      data: conversation,
+      data: transformedConversation,
     });
   })
 );
@@ -172,10 +188,23 @@ router.get(
       where: { conversationId },
     });
 
+    // Transform messages to match frontend expected structure
+    const transformedMessages = messages.map(message => ({
+      ...message,
+      toolUsages: message.toolUsages.map(toolUsage => ({
+        toolName: toolUsage.toolName,
+        input: toolUsage.input,
+        output: toolUsage.output,
+        success: toolUsage.status === 'COMPLETED',
+        duration: toolUsage.duration,
+        error: toolUsage.error,
+      })),
+    }));
+
     return res.json({
       success: true,
       data: {
-        messages,
+        messages: transformedMessages,
         pagination: {
           total: totalCount,
           limit: Number(limit),
