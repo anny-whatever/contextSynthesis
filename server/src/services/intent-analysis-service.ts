@@ -334,6 +334,7 @@ EXECUTION STRATEGY SELECTION:
 - "conditional": Tool execution depends on results of previous tools
 
 INTELLIGENT TOOL SELECTION LOGIC:
+- MOST IMPORTANT NOTE: INSTEAD OF JUST FINDING KEYWORDS, UNDERSTAND THE ENTIRE QUERY AND UNDERSTAND EACH TOOL PROPERLY TO DECIDE WHAT ARE THE EXACT STEPS AND TOOL CALLS WILL BE REQUIRED FOR THE TASK. RELYING ON SEMANTICS AND MEANING OF THE PROMPT IS THE MOST ACCURATE WAY OF DETERMINING IT.
 
 FOR HYBRID TEMPORAL + CURRENT QUERIES (e.g., "Indian News yesterday", "what happened with Tesla stock yesterday"):
 - PRIMARY: "date_based_topic_search" (to get historical context from yesterday)
@@ -410,12 +411,17 @@ CRITICAL HYBRID QUERY DETECTION:
 - If query contains BOTH temporal references AND requests for current information → "hybrid_temporal_current"
 - If query references BOTH past topics AND requests for latest/current updates → "hybrid_topic_current"
 - If query asks for comprehensive analysis requiring multiple data sources → "comprehensive"
+- **NEWS QUERIES WITH SPECIFIC DATES**: Any query asking for news from a specific date (e.g., "Malaysian news from July 24, 2023") should ALWAYS be "hybrid_temporal_current" because users typically want both historical context AND current related information for comparison/updates
+- **COUNTRY/REGION NEWS WITH DATES**: Queries like "[Country] news from [specific date]" should be "hybrid_temporal_current" to provide comprehensive coverage
 
 EXAMPLES OF HYBRID QUERIES:
 - "Indian News yesterday" → hybrid_temporal_current (needs both historical context from yesterday AND current Indian news)
+- "Malaysian news from 24 july 2023" → hybrid_temporal_current (needs both historical context from that date AND current Malaysian news for comparison/updates)
+- "US election news from November 2020" → hybrid_temporal_current (needs both historical context from that period AND current related news)
 - "latest updates on AI from last week" → hybrid_topic_current (needs both what was discussed about AI last week AND current AI updates)
 - "what's new with Tesla since we talked about it" → hybrid_topic_current (needs both historical Tesla discussion AND current Tesla news)
 - "cryptocurrency trends from yesterday and today" → hybrid_temporal_current (needs both yesterday's context AND today's trends)
+- "COVID news from March 2020" → hybrid_temporal_current (needs both historical context from that period AND current related updates)
 
 INTELLIGENT REASONING REQUIREMENTS:
 - Each tool in the execution plan MUST have clear, specific reasoning

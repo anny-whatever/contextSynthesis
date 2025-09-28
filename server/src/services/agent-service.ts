@@ -58,13 +58,14 @@ export class AgentService {
     );
     this.usageTrackingService = new UsageTrackingService(this.prisma);
 
-    // Initialize SmartContextService with both semantic and date-based search tools
+    // Initialize SmartContextService with semantic, date-based, and web search tools
     const semanticSearchTool = this.toolRegistry.getTool(
       "semantic_topic_search"
     );
     const dateBasedSearchTool = this.toolRegistry.getTool(
       "date_based_topic_search"
     );
+    const webSearchTool = this.toolRegistry.getTool("web_search");
 
     if (!semanticSearchTool) {
       throw new Error("SemanticTopicSearchTool not found in tool registry");
@@ -72,11 +73,15 @@ export class AgentService {
     if (!dateBasedSearchTool) {
       throw new Error("DateBasedTopicSearchTool not found in tool registry");
     }
+    if (!webSearchTool) {
+      throw new Error("WebSearchTool not found in tool registry");
+    }
 
     this.smartContextService = new SmartContextService(
       this.prisma,
       semanticSearchTool as any,
-      dateBasedSearchTool as any
+      dateBasedSearchTool as any,
+      webSearchTool as any
     );
 
     this.toolContextService = new ToolContextService();
@@ -768,31 +773,45 @@ You are a conversational AI assistant with excellent memory and natural communic
       criticalToolsFailed
     });
 
-    // Create a single synthesized tool result
-    contextualizedResults.push({
-      role: "tool" as const,
-      tool_call_id: toolCalls[0]?.id || "multi_tool_synthesis",
-      content: synthesizedMessage,
-    });
+    // Create individual tool results for each tool call - REQUIRED by OpenAI API
+    for (let i = 0; i < toolCalls.length; i++) {
+      const toolCall = toolCalls[i];
+      const result = toolResults[i];
+      
+      if (!toolCall?.id) {
+        console.warn(`⚠️ [TOOL-CALL] Missing tool call ID for index ${i}`);
+        continue;
+      }
 
-    // Add individual tool results for debugging/transparency if needed
-     if (this.config.enableDetailedToolLogging) {
-       for (let i = 0; i < toolResults.length; i++) {
-         const result = toolResults[i];
-         if (!result) continue; // Skip undefined results
-         
-         const toolCall = toolCalls[i];
-         const toolCallId = toolCall?.id || `tool_${i}_detail`;
+      let content: string;
+      
+      if (result && result.success) {
+        // Use detailed message for successful results
+        content = this.createDetailedToolMessage(result, userQuery, intentAnalysis);
+      } else if (result && !result.success) {
+        // Create error message for failed results
+        content = `Tool execution failed: ${result.error || 'Unknown error'}. Tool: ${result.toolName || 'unknown'}`;
+      } else {
+        // Fallback for missing results
+        content = `Tool execution completed but no result data available for ${toolCall.function?.name || 'unknown tool'}.`;
+      }
 
-         const detailMessage = this.createDetailedToolMessage(result, userQuery, intentAnalysis);
-         
-         contextualizedResults.push({
-           role: "tool" as const,
-           tool_call_id: toolCallId,
-           content: detailMessage,
-         });
-       }
-     }
+      contextualizedResults.push({
+        role: "tool" as const,
+        tool_call_id: toolCall.id,
+        content: content,
+      });
+    }
+
+    // Add synthesized summary as additional context if multiple tools were used
+    if (toolCalls.length > 1 && successfulResults.length > 0 && contextualizedResults.length > 0) {
+      // Create a summary message using the first tool call ID (since we need to respond to all calls)
+      // This provides the synthesized overview while maintaining API compliance
+      const firstResult = contextualizedResults[0];
+      if (firstResult) {
+        firstResult.content = synthesizedMessage + "\n\n" + firstResult.content;
+      }
+    }
 
     return contextualizedResults;
   }

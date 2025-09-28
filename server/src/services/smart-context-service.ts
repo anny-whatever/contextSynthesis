@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { SemanticTopicSearchTool } from "../tools/semantic-topic-search-tool";
 import { DateBasedTopicSearchTool } from "../tools/date-based-topic-search-tool";
+import { WebSearchTool } from "../tools/web-search-tool";
 import { IntentAnalysisResult, ToolExecutionPlan } from "./intent-analysis-service";
 
 export interface ToolExecutionResult {
@@ -84,16 +85,19 @@ export class SmartContextService {
   private prisma: PrismaClient;
   private semanticSearchTool: SemanticTopicSearchTool;
   private dateBasedSearchTool: DateBasedTopicSearchTool;
+  private webSearchTool: WebSearchTool;
 
   constructor(
     prisma: PrismaClient,
     semanticSearchTool: SemanticTopicSearchTool,
-    dateBasedSearchTool?: DateBasedTopicSearchTool
+    dateBasedSearchTool?: DateBasedTopicSearchTool,
+    webSearchTool?: WebSearchTool
   ) {
     this.prisma = prisma;
     this.semanticSearchTool = semanticSearchTool;
     this.dateBasedSearchTool =
       dateBasedSearchTool || new DateBasedTopicSearchTool(prisma);
+    this.webSearchTool = webSearchTool || new WebSearchTool(prisma);
   }
 
   async retrieveContext(
@@ -694,18 +698,67 @@ export class SmartContextService {
           break;
 
         case "web_search":
-          // Note: Web search tool would be implemented separately
-          // For now, return a placeholder result
-          console.log(`🌐 [WEB SEARCH] Would execute web search with query: ${toolPlan.parameters.webSearchQuery}`);
-          result = {
-            summaries: [],
-            retrievalMethod: "web_search_placeholder",
-            totalAvailable: 0,
-            retrieved: 0,
-            metadata: {
-              warning: "Web search tool not yet implemented - placeholder result"
-            }
-          };
+          console.log(`🌐 [WEB SEARCH] Executing web search with query: ${toolPlan.parameters.webSearchQuery}`);
+          const webSearchResult = await this.webSearchTool.execute({
+            query: toolPlan.parameters.webSearchQuery,
+            max_results: 10, // Default to 10 results
+            include_domains: toolPlan.parameters.searchDomains,
+            exclude_domains: undefined // Not defined in ToolExecutionPlan interface
+          });
+
+          if (webSearchResult.success && webSearchResult.data) {
+            // Format web search results to match SmartContextResult interface
+            result = {
+              summaries: webSearchResult.data.results.map((webResult: any, index: number) => ({
+                summaryText: `${webResult.title}\n\n${webResult.snippet}`,
+                topicName: `Web Search Result ${index + 1}`,
+                relatedTopics: [toolPlan.parameters.webSearchQuery],
+                messageRange: { start: 0, end: 0 },
+                summaryLevel: 1,
+                topicRelevance: 0.9, // High relevance for web search results
+                createdAt: new Date().toISOString(),
+                isExactMatch: true,
+                source: "web_search",
+                toolPriority: toolPlan.priority,
+                webSearchMetadata: {
+                  url: webResult.url,
+                  title: webResult.title,
+                  publishedDate: webResult.published_date,
+                  sourceWebsite: webResult.source
+                }
+              })),
+              retrievalMethod: "web_search",
+              totalAvailable: webSearchResult.data.total_results,
+              retrieved: webSearchResult.data.results.length,
+              confidence: {
+                searchResultQuality: 0.9,
+                averageSimilarity: 0.9,
+                hasStrongMatches: true,
+                resultCount: webSearchResult.data.results.length,
+                queryMatchRate: 1.0
+              },
+              metadata: {
+                webSearchQuery: toolPlan.parameters.webSearchQuery,
+                searchTimeMs: webSearchResult.data.search_time_ms,
+                totalResults: webSearchResult.data.total_results,
+                webSearchCost: webSearchResult.metadata?.webSearchCost,
+                webSearchCalls: webSearchResult.metadata?.webSearchCalls,
+                model: webSearchResult.metadata?.model
+              }
+            };
+          } else {
+            // Handle web search failure
+            result = {
+              summaries: [],
+              retrievalMethod: "web_search_failed",
+              totalAvailable: 0,
+              retrieved: 0,
+              metadata: {
+                error: webSearchResult.error || "Web search failed",
+                webSearchQuery: toolPlan.parameters.webSearchQuery
+              }
+            };
+          }
           break;
 
         default:
