@@ -3,6 +3,7 @@ import {
   CostService,
   TokenUsage,
   WebSearchUsage,
+  EmbeddingUsage,
   CostCalculation,
 } from "./cost-service";
 
@@ -21,6 +22,7 @@ export interface UsageTrackingData {
   metadata?: any;
   batchId?: string;
   webSearchUsage?: WebSearchUsage;
+  embeddingUsage?: EmbeddingUsage;
 }
 
 export interface UsageAnalytics {
@@ -79,7 +81,8 @@ export class UsageTrackingService {
       const costCalculation = CostService.calculateCost(
         data.model,
         tokenUsage,
-        data.webSearchUsage
+        data.webSearchUsage,
+        data.embeddingUsage
       );
 
       // Create usage tracking record

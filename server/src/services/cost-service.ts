@@ -8,6 +8,11 @@ export interface WebSearchUsage {
   model?: string;
 }
 
+export interface EmbeddingUsage {
+  inputTokens: number;
+  model: string;
+}
+
 export interface CostCalculation {
   inputTokens: number;
   outputTokens: number;
@@ -16,12 +21,22 @@ export interface CostCalculation {
   totalCost: number;
   webSearchCalls?: number;
   webSearchCost?: number;
+  embeddingTokens?: number;
+  embeddingCost?: number;
 }
 
 export class CostService {
   // GPT-4o-mini pricing per million tokens
   private static readonly GPT_4O_MINI_INPUT_COST_PER_MILLION = 0.15;
   private static readonly GPT_4O_MINI_OUTPUT_COST_PER_MILLION = 0.6;
+
+  // Embedding pricing per million tokens
+  private static readonly EMBEDDING_COST_PER_MILLION: Record<string, number> = {
+    "text-embedding-3-small": 0.02,
+    "text-embedding-3-large": 0.13,
+    "text-embedding-ada-002": 0.10,
+    default: 0.02, // Default to text-embedding-3-small pricing
+  };
 
   // Web search tool call pricing per 1000 calls
   private static readonly WEB_SEARCH_COST_PER_1K_CALLS: Record<string, number> =
@@ -70,12 +85,24 @@ export class CostService {
   }
 
   /**
+   * Calculate embedding cost
+   */
+  static calculateEmbeddingCost(usage: EmbeddingUsage): number {
+    const costPerMillion =
+      this.EMBEDDING_COST_PER_MILLION[usage.model] ??
+      this.EMBEDDING_COST_PER_MILLION["default"]!;
+    const cost = (usage.inputTokens / 1_000_000) * costPerMillion;
+    return Number(cost.toFixed(6));
+  }
+
+  /**
    * Calculate cost for any model (extensible for future models)
    */
   static calculateCost(
     model: string,
     usage: TokenUsage,
-    webSearchUsage?: WebSearchUsage
+    webSearchUsage?: WebSearchUsage,
+    embeddingUsage?: EmbeddingUsage
   ): CostCalculation {
     let baseCost: CostCalculation;
 
@@ -96,6 +123,16 @@ export class CostService {
       baseCost.webSearchCost = webSearchCost;
       baseCost.totalCost = Number(
         (baseCost.totalCost + webSearchCost).toFixed(6)
+      );
+    }
+
+    // Add embedding costs if provided
+    if (embeddingUsage && embeddingUsage.inputTokens > 0) {
+      const embeddingCost = this.calculateEmbeddingCost(embeddingUsage);
+      baseCost.embeddingTokens = embeddingUsage.inputTokens;
+      baseCost.embeddingCost = embeddingCost;
+      baseCost.totalCost = Number(
+        (baseCost.totalCost + embeddingCost).toFixed(6)
       );
     }
 
@@ -124,5 +161,12 @@ export class CostService {
    */
   static formatWebSearchCalls(calls: number): string {
     return `${calls} search${calls === 1 ? "" : "es"}`;
+  }
+
+  /**
+   * Format embedding tokens for display (e.g., "1,234 embedding tokens")
+   */
+  static formatEmbeddingTokens(tokens: number): string {
+    return `${tokens.toLocaleString()} embedding tokens`;
   }
 }

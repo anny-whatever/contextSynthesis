@@ -1,19 +1,24 @@
 import OpenAI from 'openai';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, UsageOperationType } from '@prisma/client';
+import { UsageTrackingService } from './usage-tracking-service';
 
 export class TopicEmbeddingService {
   private openai: OpenAI;
   private prisma: PrismaClient;
+  private usageTrackingService: UsageTrackingService;
 
-  constructor(openai: OpenAI, prisma: PrismaClient) {
+  constructor(openai: OpenAI, prisma: PrismaClient, usageTrackingService?: UsageTrackingService) {
     this.openai = openai;
     this.prisma = prisma;
+    this.usageTrackingService = usageTrackingService || new UsageTrackingService(prisma);
   }
 
   /**
    * Generate embedding for a topic name
    */
   async generateTopicEmbedding(topicName: string): Promise<number[]> {
+    const startTime = Date.now();
+    
     try {
       const response = await this.openai.embeddings.create({
         model: 'text-embedding-3-small',
@@ -21,8 +26,49 @@ export class TopicEmbeddingService {
         dimensions: 384
       });
 
+      const duration = Date.now() - startTime;
+      const inputTokens = response.usage?.total_tokens || 0;
+
+      // Track embedding usage
+      await this.usageTrackingService.trackUsage({
+        operationType: UsageOperationType.EMBEDDING_GENERATION,
+        operationSubtype: 'topic_embedding',
+        model: 'text-embedding-3-small',
+        inputTokens: 0, // Embeddings don't have separate input/output tokens
+        outputTokens: 0,
+        duration,
+        success: true,
+        metadata: {
+          topicName,
+          dimensions: 384,
+          totalTokens: inputTokens
+        },
+        embeddingUsage: {
+          inputTokens,
+          model: 'text-embedding-3-small'
+        }
+      });
+
       return response.data[0]?.embedding || [];
     } catch (error) {
+      const duration = Date.now() - startTime;
+      
+      // Track failed embedding usage
+      await this.usageTrackingService.trackUsage({
+        operationType: UsageOperationType.EMBEDDING_GENERATION,
+        operationSubtype: 'topic_embedding',
+        model: 'text-embedding-3-small',
+        inputTokens: 0,
+        outputTokens: 0,
+        duration,
+        success: false,
+        errorMessage: error instanceof Error ? error.message : 'Unknown error',
+        metadata: {
+          topicName,
+          dimensions: 384
+        }
+      });
+
       console.error('Error generating embedding:', error);
       throw new Error(`Failed to generate embedding for topic: ${topicName}`);
     }

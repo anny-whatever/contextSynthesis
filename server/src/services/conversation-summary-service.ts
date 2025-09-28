@@ -6,6 +6,7 @@ import {
   TopicExtractionResult,
 } from "./topic-extraction-service";
 import { TopicEmbeddingService } from "./topic-embedding-service";
+import { UsageTrackingService } from "./usage-tracking-service";
 
 export interface TopicSummaryResult {
   id: string;
@@ -55,7 +56,7 @@ export class ConversationSummaryService {
     this.openai = openai;
     this.topicExtractionService = new TopicExtractionService(prisma);
     this.topicEmbeddingService =
-      topicEmbeddingService || new TopicEmbeddingService(openai, prisma);
+      topicEmbeddingService || new TopicEmbeddingService(openai, prisma, new UsageTrackingService(prisma));
   }
 
   async checkAndCreateSummary(
