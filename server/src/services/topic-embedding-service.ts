@@ -16,7 +16,11 @@ export class TopicEmbeddingService {
   /**
    * Generate embedding for a topic name
    */
-  async generateTopicEmbedding(topicName: string): Promise<number[]> {
+  async generateTopicEmbedding(
+    topicName: string, 
+    conversationId?: string, 
+    messageId?: string
+  ): Promise<number[]> {
     const startTime = Date.now();
     
     try {
@@ -29,8 +33,8 @@ export class TopicEmbeddingService {
       const duration = Date.now() - startTime;
       const inputTokens = response.usage?.total_tokens || 0;
 
-      // Track embedding usage
-      await this.usageTrackingService.trackUsage({
+      // Track embedding usage with conversationId and messageId when available
+      const usageData: any = {
         operationType: UsageOperationType.EMBEDDING_GENERATION,
         operationSubtype: 'topic_embedding',
         model: 'text-embedding-3-small',
@@ -47,14 +51,19 @@ export class TopicEmbeddingService {
           inputTokens,
           model: 'text-embedding-3-small'
         }
-      });
+      };
+
+      if (conversationId) usageData.conversationId = conversationId;
+      if (messageId) usageData.messageId = messageId;
+
+      await this.usageTrackingService.trackUsage(usageData);
 
       return response.data[0]?.embedding || [];
     } catch (error) {
       const duration = Date.now() - startTime;
       
-      // Track failed embedding usage
-      await this.usageTrackingService.trackUsage({
+      // Track failed embedding usage with conversationId and messageId when available
+      const errorUsageData: any = {
         operationType: UsageOperationType.EMBEDDING_GENERATION,
         operationSubtype: 'topic_embedding',
         model: 'text-embedding-3-small',
@@ -67,7 +76,12 @@ export class TopicEmbeddingService {
           topicName,
           dimensions: 384
         }
-      });
+      };
+
+      if (conversationId) errorUsageData.conversationId = conversationId;
+      if (messageId) errorUsageData.messageId = messageId;
+
+      await this.usageTrackingService.trackUsage(errorUsageData);
 
       console.error('Error generating embedding:', error);
       throw new Error(`Failed to generate embedding for topic: ${topicName}`);
@@ -79,18 +93,21 @@ export class TopicEmbeddingService {
    */
   async updateSummaryEmbedding(summaryId: string): Promise<void> {
     try {
-      // Get the summary
+      // Get the summary with conversationId
       const summary = await this.prisma.conversationSummary.findUnique({
         where: { id: summaryId },
-        select: { topicName: true }
+        select: { topicName: true, conversationId: true }
       });
 
       if (!summary || !summary.topicName) {
         throw new Error(`Summary not found or missing topic name: ${summaryId}`);
       }
 
-      // Generate embedding
-      const embedding = await this.generateTopicEmbedding(summary.topicName);
+      // Generate embedding with conversationId
+      const embedding = await this.generateTopicEmbedding(
+        summary.topicName, 
+        summary.conversationId
+      );
 
       // Update the summary with the embedding using raw SQL
       await this.prisma.$executeRaw`
