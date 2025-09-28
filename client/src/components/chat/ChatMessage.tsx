@@ -2,7 +2,7 @@ import { Avatar, AvatarFallback } from '../ui/avatar';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Bot, User } from 'lucide-react';
-import { MarkdownRenderer } from '../ui/MarkdownRenderer';
+import MarkdownRenderer from '../ui/MarkdownRenderer';
 import type { Message } from '../../types/chat';
 
 interface ChatMessageProps {
@@ -34,15 +34,13 @@ export function ChatMessage({ message }: ChatMessageProps) {
           <CardContent className="p-3">
             <div className="text-sm">
               <MarkdownRenderer 
+                content={message.content}
                 className={`${
                   isUser 
                     ? 'prose-invert prose-headings:text-primary-foreground prose-p:text-primary-foreground prose-strong:text-primary-foreground prose-code:text-primary-foreground prose-pre:bg-primary-foreground/10' 
                     : 'prose-slate'
                 }`}
-                isDarkMode={!isUser}
-              >
-                {message.content}
-              </MarkdownRenderer>
+              />
             </div>
           </CardContent>
         </Card>

@@ -1,214 +1,185 @@
 import React from 'react';
-import Markdown from 'react-markdown';
+import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
-import { oneLight } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { cn } from '@/lib/utils';
-import type { Components } from 'react-markdown';
 
 interface MarkdownRendererProps {
-  children: string;
+  content: string;
   className?: string;
-  isDarkMode?: boolean;
 }
 
-export function MarkdownRenderer({ 
-  children: markdown, 
-  className,
-  isDarkMode = true 
-}: MarkdownRendererProps) {
+const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className }) => {
   return (
-    <div className={cn("prose prose-sm max-w-none", className)}>
-      <Markdown
+    <div className={cn("prose prose-sm max-w-none markdown-content", className)}>
+      <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
-          // Custom code block renderer with syntax highlighting
-          code({ node, inline, className, children, ...props }: any) {
-            const match = /language-(\w+)/.exec(className || '');
-            const language = match ? match[1] : '';
-
-            return !inline && match ? (
-              <SyntaxHighlighter
-                style={isDarkMode ? oneDark : oneLight}
-                language={language}
-                PreTag="div"
-                className="rounded-md"
-                showLineNumbers={true}
-                lineNumberStyle={{
-                  minWidth: '2.5em',
-                  paddingRight: '1em',
-                  color: isDarkMode ? '#6b7280' : '#9ca3af',
-                  borderRight: `1px solid ${isDarkMode ? '#374151' : '#e5e7eb'}`,
-                  marginRight: '1em',
-                } as any}
-                customStyle={{
-                  margin: 0,
-                  borderRadius: '0.375rem',
-                  fontSize: '0.875rem',
-                }}
-                {...props}
-              >
-                {String(children).replace(/\n$/, '')}
-              </SyntaxHighlighter>
-            ) : (
-              <code 
-                className={cn(
-                  "relative rounded bg-muted px-[0.3rem] py-[0.2rem] font-mono text-sm font-semibold",
-                  className
-                )} 
+          // Headers
+          h1: ({ children }) => (
+            <h1 className="text-lg font-bold text-slate-900 mb-2 mt-4 first:mt-0">
+              {children}
+            </h1>
+          ),
+          h2: ({ children }) => (
+            <h2 className="text-base font-bold text-slate-900 mb-2 mt-3 first:mt-0">
+              {children}
+            </h2>
+          ),
+          h3: ({ children }) => (
+            <h3 className="text-sm font-semibold text-slate-900 mb-1 mt-3 first:mt-0">
+              {children}
+            </h3>
+          ),
+          h4: ({ children }) => (
+            <h4 className="text-sm font-semibold text-slate-800 mb-1 mt-2 first:mt-0">
+              {children}
+            </h4>
+          ),
+          h5: ({ children }) => (
+            <h5 className="text-sm font-medium text-slate-800 mb-1 mt-2 first:mt-0">
+              {children}
+            </h5>
+          ),
+          h6: ({ children }) => (
+            <h6 className="text-sm font-medium text-slate-700 mb-1 mt-2 first:mt-0">
+              {children}
+            </h6>
+          ),
+          
+          // Paragraphs
+          p: ({ children }) => (
+            <p className="text-sm leading-relaxed text-slate-800 mb-3 last:mb-0">
+              {children}
+            </p>
+          ),
+          
+          // Lists
+          ul: ({ children }) => (
+            <ul className="list-disc ml-4 pl-2 text-sm text-slate-800 mb-3 space-y-1.5">
+              {children}
+            </ul>
+          ),
+          ol: ({ children }) => (
+            <ol className="list-decimal ml-4 pl-2 text-sm text-slate-800 mb-3 space-y-1.5">
+              {children}
+            </ol>
+          ),
+          li: ({ children }) => (
+            <li className="text-sm text-slate-800 leading-relaxed pl-1">
+              {children}
+            </li>
+          ),
+          
+          // Code
+          code: ({ children, className, ...props }: any) => {
+            const isInline = !className?.includes('language-');
+            if (isInline) {
+              return (
+                <code
+                  className="bg-slate-100 text-slate-800 px-1 py-0.5 rounded text-xs font-mono"
+                  {...props}
+                >
+                  {children}
+                </code>
+              );
+            }
+            return (
+              <code
+                className={cn("block bg-slate-100 text-slate-800 p-3 rounded-md text-xs font-mono overflow-x-auto", className)}
                 {...props}
               >
                 {children}
               </code>
             );
           },
-          // Custom heading renderers with proper spacing
-          h1({ children, ...props }) {
-            return (
-              <h1 className="scroll-m-20 text-2xl font-extrabold tracking-tight lg:text-3xl mb-4 mt-6" {...props}>
+          pre: ({ children }) => (
+            <pre className="bg-slate-100 p-3 rounded-md mb-2 overflow-x-auto">
+              {children}
+            </pre>
+          ),
+          
+          // Blockquotes
+          blockquote: ({ children }) => (
+            <blockquote className="border-l-4 border-slate-300 pl-4 py-2 mb-2 bg-slate-50 text-slate-700 italic">
+              {children}
+            </blockquote>
+          ),
+          
+          // Links
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-blue-600 hover:text-blue-800 underline"
+            >
+              {children}
+            </a>
+          ),
+          
+          // Tables
+          table: ({ children }) => (
+            <div className="overflow-x-auto mb-2">
+              <table className="min-w-full border-collapse border border-slate-300 text-sm">
                 {children}
-              </h1>
-            );
-          },
-          h2({ children, ...props }) {
-            return (
-              <h2 className="scroll-m-20 border-b pb-2 text-xl font-semibold tracking-tight mb-3 mt-5" {...props}>
-                {children}
-              </h2>
-            );
-          },
-          h3({ children, ...props }) {
-            return (
-              <h3 className="scroll-m-20 text-lg font-semibold tracking-tight mb-2 mt-4" {...props}>
-                {children}
-              </h3>
-            );
-          },
-          h4({ children, ...props }) {
-            return (
-              <h4 className="scroll-m-20 text-base font-semibold tracking-tight mb-2 mt-3" {...props}>
-                {children}
-              </h4>
-            );
-          },
-          // Custom paragraph with proper spacing
-          p({ children, ...props }) {
-            return (
-              <p className="leading-7 mb-3" {...props}>
-                {children}
-              </p>
-            );
-          },
-          // Custom list renderers
-          ul({ children, ...props }) {
-            return (
-              <ul className="my-3 ml-6 list-disc [&>li]:mt-1" {...props}>
-                {children}
-              </ul>
-            );
-          },
-          ol({ children, ...props }) {
-            return (
-              <ol className="my-3 ml-6 list-decimal [&>li]:mt-1" {...props}>
-                {children}
-              </ol>
-            );
-          },
-          li({ children, ...props }) {
-            return (
-              <li className="leading-7" {...props}>
-                {children}
-              </li>
-            );
-          },
-          // Custom blockquote
-          blockquote({ children, ...props }) {
-            return (
-              <blockquote className="mt-3 mb-3 border-l-2 pl-6 italic border-muted-foreground/20" {...props}>
-                {children}
-              </blockquote>
-            );
-          },
-          // Custom table renderers
-          table({ children, ...props }) {
-            return (
-              <div className="my-3 w-full overflow-y-auto">
-                <table className="w-full border-collapse border border-muted" {...props}>
-                  {children}
-                </table>
-              </div>
-            );
-          },
-          thead({ children, ...props }) {
-            return (
-              <thead className="bg-muted" {...props}>
-                {children}
-              </thead>
-            );
-          },
-          th({ children, ...props }) {
-            return (
-              <th className="border border-muted px-4 py-2 text-left font-bold" {...props}>
-                {children}
-              </th>
-            );
-          },
-          td({ children, ...props }) {
-            return (
-              <td className="border border-muted px-4 py-2" {...props}>
-                {children}
-              </td>
-            );
-          },
-          // Custom link styling
-          a({ children, href, ...props }) {
-            return (
-              <a 
-                href={href}
-                className="font-medium text-primary underline underline-offset-4 hover:text-primary/80"
-                target="_blank"
-                rel="noopener noreferrer"
-                {...props}
-              >
-                {children}
-              </a>
-            );
-          },
-          // Custom horizontal rule
-          hr({ ...props }) {
-            return (
-              <hr className="my-4 border-muted" {...props} />
-            );
-          },
-          // Custom strong/bold text
-          strong({ children, ...props }) {
-            return (
-              <strong className="font-semibold" {...props}>
-                {children}
-              </strong>
-            );
-          },
-          // Custom emphasis/italic text
-          em({ children, ...props }) {
-            return (
-              <em className="italic" {...props}>
-                {children}
-              </em>
-            );
-          },
-          // Custom strikethrough (from remark-gfm)
-          del({ children, ...props }) {
-            return (
-              <del className="line-through text-muted-foreground" {...props}>
-                {children}
-              </del>
-            );
-          },
+              </table>
+            </div>
+          ),
+          thead: ({ children }) => (
+            <thead className="bg-slate-100">
+              {children}
+            </thead>
+          ),
+          tbody: ({ children }) => (
+            <tbody>
+              {children}
+            </tbody>
+          ),
+          tr: ({ children }) => (
+            <tr className="border-b border-slate-200">
+              {children}
+            </tr>
+          ),
+          th: ({ children }) => (
+            <th className="border border-slate-300 px-3 py-2 text-left font-semibold text-slate-900">
+              {children}
+            </th>
+          ),
+          td: ({ children }) => (
+            <td className="border border-slate-300 px-3 py-2 text-slate-800">
+              {children}
+            </td>
+          ),
+          
+          // Emphasis
+          strong: ({ children }) => (
+            <strong className="font-semibold text-slate-900">
+              {children}
+            </strong>
+          ),
+          em: ({ children }) => (
+            <em className="italic text-slate-800">
+              {children}
+            </em>
+          ),
+          
+          // Strikethrough
+          del: ({ children }) => (
+            <del className="line-through text-slate-600">
+              {children}
+            </del>
+          ),
+          
+          // Horizontal rule
+          hr: () => (
+            <hr className="border-t border-slate-300 my-4" />
+          ),
         }}
       >
-        {markdown}
-      </Markdown>
+        {content}
+      </ReactMarkdown>
     </div>
   );
-}
+};
+
+export default MarkdownRenderer;
