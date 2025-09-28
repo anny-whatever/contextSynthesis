@@ -1,58 +1,80 @@
-import React from 'react';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
-import { cn } from '@/lib/utils';
+import React from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import { cn } from "@/lib/utils";
+import "katex/dist/katex.min.css";
 
 interface MarkdownRendererProps {
   content: string;
   className?: string;
 }
 
-const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className }) => {
+const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
+  content,
+  className,
+}) => {
+  // Preprocess content to convert square bracket math notation to dollar sign notation
+  const preprocessMath = (text: string): string => {
+    // Convert block math: [ ... ] on its own line to $$ ... $$
+    text = text.replace(/^\s*\[\s*(.*?)\s*\]\s*$/gm, "$$$$1$$");
+
+    // Convert inline math: [ ... ] to $ ... $
+    text = text.replace(/\[\s*(.*?)\s*\]/g, "$$$1$$");
+
+    return text;
+  };
+
+  const processedContent = preprocessMath(content);
+
   return (
-    <div className={cn("prose prose-sm max-w-none markdown-content", className)}>
+    <div
+      className={cn("max-w-none prose prose-sm markdown-content", className)}
+    >
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[rehypeKatex]}
         components={{
           // Headers
           h1: ({ children }) => (
-            <h1 className="text-lg font-bold text-slate-900 mb-2 mt-4 first:mt-0">
+            <h1 className="mt-4 mb-2 text-lg font-bold text-slate-900 first:mt-0">
               {children}
             </h1>
           ),
           h2: ({ children }) => (
-            <h2 className="text-base font-bold text-slate-900 mb-2 mt-3 first:mt-0">
+            <h2 className="mt-3 mb-2 text-base font-bold text-slate-900 first:mt-0">
               {children}
             </h2>
           ),
           h3: ({ children }) => (
-            <h3 className="text-sm font-semibold text-slate-900 mb-1 mt-3 first:mt-0">
+            <h3 className="mt-3 mb-1 text-sm font-semibold text-slate-900 first:mt-0">
               {children}
             </h3>
           ),
           h4: ({ children }) => (
-            <h4 className="text-sm font-semibold text-slate-800 mb-1 mt-2 first:mt-0">
+            <h4 className="mt-2 mb-1 text-sm font-semibold text-slate-800 first:mt-0">
               {children}
             </h4>
           ),
           h5: ({ children }) => (
-            <h5 className="text-sm font-medium text-slate-800 mb-1 mt-2 first:mt-0">
+            <h5 className="mt-2 mb-1 text-sm font-medium text-slate-800 first:mt-0">
               {children}
             </h5>
           ),
           h6: ({ children }) => (
-            <h6 className="text-sm font-medium text-slate-700 mb-1 mt-2 first:mt-0">
+            <h6 className="mt-2 mb-1 text-sm font-medium text-slate-700 first:mt-0">
               {children}
             </h6>
           ),
-          
+
           // Paragraphs
           p: ({ children }) => (
-            <p className="text-sm leading-relaxed text-slate-800 mb-3 last:mb-0">
+            <p className="mb-3 text-sm leading-relaxed text-slate-800 last:mb-0">
               {children}
             </p>
           ),
-          
+
           // Lists
           ul: ({ children }) => (
             <ul className="list-disc ml-4 pl-2 text-sm text-slate-800 mb-3 space-y-1.5">
@@ -65,14 +87,14 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             </ol>
           ),
           li: ({ children }) => (
-            <li className="text-sm text-slate-800 leading-relaxed pl-1">
+            <li className="pl-1 text-sm leading-relaxed text-slate-800">
               {children}
             </li>
           ),
-          
+
           // Code
           code: ({ children, className, ...props }: any) => {
-            const isInline = !className?.includes('language-');
+            const isInline = !className?.includes("language-");
             if (isInline) {
               return (
                 <code
@@ -85,7 +107,10 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             }
             return (
               <code
-                className={cn("block bg-slate-100 text-slate-800 p-3 rounded-md text-xs font-mono overflow-x-auto", className)}
+                className={cn(
+                  "block overflow-x-auto p-3 font-mono text-xs rounded-md bg-slate-100 text-slate-800",
+                  className
+                )}
                 {...props}
               >
                 {children}
@@ -93,90 +118,74 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, className 
             );
           },
           pre: ({ children }) => (
-            <pre className="bg-slate-100 p-3 rounded-md mb-2 overflow-x-auto">
+            <pre className="overflow-x-auto p-3 mb-2 rounded-md bg-slate-100">
               {children}
             </pre>
           ),
-          
+
           // Blockquotes
           blockquote: ({ children }) => (
-            <blockquote className="border-l-4 border-slate-300 pl-4 py-2 mb-2 bg-slate-50 text-slate-700 italic">
+            <blockquote className="py-2 pl-4 mb-2 italic border-l-4 border-slate-300 bg-slate-50 text-slate-700">
               {children}
             </blockquote>
           ),
-          
+
           // Links
           a: ({ href, children }) => (
             <a
               href={href}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-blue-600 hover:text-blue-800 underline"
+              className="text-blue-600 underline hover:text-blue-800"
             >
               {children}
             </a>
           ),
-          
+
           // Tables
           table: ({ children }) => (
             <div className="overflow-x-auto mb-2">
-              <table className="min-w-full border-collapse border border-slate-300 text-sm">
+              <table className="min-w-full text-sm border border-collapse border-slate-300">
                 {children}
               </table>
             </div>
           ),
           thead: ({ children }) => (
-            <thead className="bg-slate-100">
-              {children}
-            </thead>
+            <thead className="bg-slate-100">{children}</thead>
           ),
-          tbody: ({ children }) => (
-            <tbody>
-              {children}
-            </tbody>
-          ),
+          tbody: ({ children }) => <tbody>{children}</tbody>,
           tr: ({ children }) => (
-            <tr className="border-b border-slate-200">
-              {children}
-            </tr>
+            <tr className="border-b border-slate-200">{children}</tr>
           ),
           th: ({ children }) => (
-            <th className="border border-slate-300 px-3 py-2 text-left font-semibold text-slate-900">
+            <th className="px-3 py-2 font-semibold text-left border border-slate-300 text-slate-900">
               {children}
             </th>
           ),
           td: ({ children }) => (
-            <td className="border border-slate-300 px-3 py-2 text-slate-800">
+            <td className="px-3 py-2 border border-slate-300 text-slate-800">
               {children}
             </td>
           ),
-          
+
           // Emphasis
           strong: ({ children }) => (
-            <strong className="font-semibold text-slate-900">
-              {children}
-            </strong>
+            <strong className="font-semibold text-slate-900">{children}</strong>
           ),
           em: ({ children }) => (
-            <em className="italic text-slate-800">
-              {children}
-            </em>
+            <em className="italic text-slate-800">{children}</em>
           ),
-          
+
           // Strikethrough
           del: ({ children }) => (
-            <del className="line-through text-slate-600">
-              {children}
-            </del>
+            <del className="line-through text-slate-600">{children}</del>
           ),
-          
+
           // Horizontal rule
-          hr: () => (
-            <hr className="border-t border-slate-300 my-4" />
-          ),
+          hr: () => <hr className="my-4 border-t border-slate-300" />,
         }}
       >
-        {content}
+        {processedContent}
       </ReactMarkdown>
     </div>
   );
