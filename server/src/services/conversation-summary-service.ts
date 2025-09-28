@@ -287,7 +287,7 @@ export class ConversationSummaryService {
     }
 
     // Store all topic summaries in the database
-    await this.storeTopicSummaries(conversationId, topicSummaries, allMessages);
+    await this.storeTopicSummaries(conversationId, topicSummaries, allMessages, userMessageId, userId);
 
     console.log(
       "📊 [SUMMARY-COMPLETE] Created",
@@ -379,7 +379,9 @@ export class ConversationSummaryService {
   private async storeTopicSummaries(
     conversationId: string,
     summaries: TopicSummaryResult[],
-    messages: Message[]
+    messages: Message[],
+    userMessageId?: string,
+    userId?: string
   ): Promise<void> {
     // Create all topic summaries in a transaction
     const createdSummaries = await this.prisma.$transaction(async (tx) => {
@@ -439,7 +441,9 @@ export class ConversationSummaryService {
     for (const createdSummary of createdSummaries) {
       try {
         await this.topicEmbeddingService.updateSummaryEmbedding(
-          createdSummary.id
+          createdSummary.id,
+          userMessageId,
+          userId
         );
         console.log(
           `✅ [EMBEDDING] Generated embedding for summary: ${createdSummary.id} (${createdSummary.topicName})`

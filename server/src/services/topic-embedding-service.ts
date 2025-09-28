@@ -37,7 +37,8 @@ export class TopicEmbeddingService {
   async generateTopicEmbedding(
     topicName: string, 
     conversationId?: string, 
-    messageId?: string
+    messageId?: string,
+    userId?: string
   ): Promise<number[]> {
     const startTime = Date.now();
     
@@ -73,6 +74,7 @@ export class TopicEmbeddingService {
 
       if (conversationId) usageData.conversationId = conversationId;
       if (messageId) usageData.messageId = messageId;
+      if (userId) usageData.userId = userId;
 
       await this.usageTrackingService.trackUsage(usageData);
 
@@ -98,6 +100,7 @@ export class TopicEmbeddingService {
 
       if (conversationId) errorUsageData.conversationId = conversationId;
       if (messageId) errorUsageData.messageId = messageId;
+      if (userId) errorUsageData.userId = userId;
 
       await this.usageTrackingService.trackUsage(errorUsageData);
 
@@ -109,7 +112,7 @@ export class TopicEmbeddingService {
   /**
    * Update a conversation summary with its topic embedding
    */
-  async updateSummaryEmbedding(summaryId: string): Promise<void> {
+  async updateSummaryEmbedding(summaryId: string, messageId?: string, userId?: string): Promise<void> {
     try {
       // Get the summary with conversationId
       const summary = await this.prisma.conversationSummary.findUnique({
@@ -121,10 +124,12 @@ export class TopicEmbeddingService {
         throw new Error(`Summary not found or missing topic name: ${summaryId}`);
       }
 
-      // Generate embedding with conversationId
+      // Generate embedding with conversationId, messageId, and userId
       const embedding = await this.generateTopicEmbedding(
         summary.topicName, 
-        summary.conversationId
+        summary.conversationId,
+        messageId,
+        userId
       );
 
       // Update the summary with the embedding using raw SQL
