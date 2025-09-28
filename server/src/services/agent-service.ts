@@ -754,16 +754,47 @@ INSTRUCTION: Tell the user no matching information was found and suggest alterna
     // For successful results, be very explicit about what to do
     let instruction: string;
 
-    if (context.toolExecution.name.includes("search")) {
-      instruction = `✅ SEARCH RESULTS FOUND - USE THESE TO ANSWER THE USER'S QUESTION
+    // Handle different tool types with specific instructions
+    switch (context.toolExecution.name) {
+      case "semantic_topic_search":
+      case "date_based_topic_search":
+        instruction = `✅ SEARCH RESULTS FOUND - USE THESE TO ANSWER THE USER'S QUESTION
 Found ${resultCount} relevant result${resultCount === 1 ? "" : "s"} for: "${
-        context.userRequest
-      }"
+          context.userRequest
+        }"
 ${context.results.timeframe ? `Timeframe: ${context.results.timeframe}` : ""}
 
 CRITICAL: The user asked about past conversations. These search results ARE the information they're looking for. Reference the specific topics, details, and information found below to answer their question completely.`;
-    } else {
-      instruction = `✅ TOOL RESULTS - USE THIS INFORMATION
+        break;
+
+      case "web_search":
+        instruction = `✅ WEB SEARCH RESULTS FOUND - USE THESE FOR CURRENT INFORMATION
+Found ${resultCount} web result${resultCount === 1 ? "" : "s"} for: "${
+          context.userRequest
+        }"
+
+CRITICAL: These are current web search results. Use them to provide up-to-date information and cite the sources. Combine with conversation context if relevant.`;
+        break;
+
+      case "topic_count_tool":
+        instruction = `✅ CONVERSATION STATISTICS FOUND - USE THIS COUNT DATA
+Query: "${context.userRequest}"
+Results: ${context.results.summary}
+
+CRITICAL: Provide the user with the specific count/statistics found below. This is factual data about their conversation history.`;
+        break;
+
+      case "current_time_tool":
+        instruction = `✅ CURRENT TIME DATA - USE THIS INFORMATION
+Query: "${context.userRequest}"
+Results: ${context.results.summary}
+
+INSTRUCTION: Use the current time/date information below to answer the user's time-related question.`;
+        break;
+
+      default:
+        // Fallback for any new tools
+        instruction = `✅ TOOL RESULTS - USE THIS INFORMATION
 Tool: ${context.toolExecution.name}
 Results: ${context.results.summary}
 
@@ -790,7 +821,9 @@ ${JSON.stringify(context.data, null, 2)}`;
       semantic_topic_search: `User asked about specific topics: ${intentAnalysis.keyTopics.join(
         ", "
       )} - executed semantic search`,
+      web_search: `User query requires current information not available in conversation history - executed web search`,
       topic_count_tool: `User requested count/statistics about conversation topics`,
+      current_time_tool: `User requested current time/date information`,
       conversation_summary_tool: `User requested conversation summary or overview`,
     };
 
@@ -840,10 +873,23 @@ ${JSON.stringify(context.data, null, 2)}`;
       }`;
     }
 
+    // Handle web search
+    if (toolName === "web_search") {
+      const results = data.results || data.webResults || [];
+      const count = Array.isArray(results) ? results.length : 0;
+      return `Found ${count} web search result${count === 1 ? "" : "s"}`;
+    }
+
     // Handle topic count
     if (toolName === "topic_count_tool") {
       const count = data.count || 0;
       return `Found ${count} total topics in conversation`;
+    }
+
+    // Handle current time
+    if (toolName === "current_time_tool") {
+      const currentTime = data.currentTime || data.timestamp || "current time";
+      return `Retrieved current time: ${currentTime}`;
     }
 
     // Generic fallback
@@ -861,35 +907,48 @@ ${JSON.stringify(context.data, null, 2)}`;
     output: any,
     intentAnalysis: IntentAnalysisResult
   ): string {
-    if (toolName.includes("search")) {
-      const count = this.getResultCount(output);
-      if (count === 0) {
-        return "No matching results found. Let the user know and suggest alternative approaches or different search terms.";
-      }
+    const count = this.getResultCount(output);
 
-      let instructions = `USE THESE ${count} RESULT${
-        count === 1 ? "" : "S"
-      } to answer the user's question comprehensively.`;
+    switch (toolName) {
+      case "semantic_topic_search":
+      case "date_based_topic_search":
+        if (count === 0) {
+          return "No matching conversation results found. Let the user know and suggest alternative approaches or different search terms.";
+        }
 
-      // Add specific guidance based on intent
-      if (intentAnalysis.relationshipToHistory === "recall") {
-        instructions +=
-          " Reference specific topics, dates, and details mentioned in the results to help the user recall the conversation.";
-      } else if (intentAnalysis.dateQuery) {
-        instructions +=
-          " Reference the specific timeframes and dates found in the results.";
-      } else {
-        instructions += " Reference the relevant topics and context found.";
-      }
+        let instructions = `USE THESE ${count} CONVERSATION RESULT${
+          count === 1 ? "" : "S"
+        } to answer the user's question comprehensively.`;
 
-      return instructions;
+        // Add specific guidance based on intent
+        if (intentAnalysis.relationshipToHistory === "recall") {
+          instructions +=
+            " Reference specific topics, dates, and details mentioned in the results to help the user recall the conversation.";
+        } else if (intentAnalysis.dateQuery) {
+          instructions +=
+            " Reference the specific timeframes and dates found in the results.";
+        } else {
+          instructions += " Reference the relevant topics and context found.";
+        }
+        return instructions;
+
+      case "web_search":
+        if (count === 0) {
+          return "No web search results found. Let the user know and suggest alternative search terms or approaches.";
+        }
+        return `USE THESE ${count} WEB SEARCH RESULT${
+          count === 1 ? "" : "S"
+        } to provide current information. Always cite your sources and combine with conversation context when relevant.`;
+
+      case "topic_count_tool":
+        return "Provide the user with the specific topic count and any relevant statistics about their conversation history.";
+
+      case "current_time_tool":
+        return "Use the current time/date information to answer the user's time-related question accurately.";
+
+      default:
+        return "Use this information to respond to the user's request appropriately.";
     }
-
-    if (toolName === "topic_count_tool") {
-      return "Provide the user with the topic count and any relevant statistics about their conversation.";
-    }
-
-    return "Use this information to respond to the user's request appropriately.";
   }
 
   /**
