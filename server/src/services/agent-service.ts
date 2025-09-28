@@ -13,6 +13,7 @@ import {
 import { SmartContextService } from "./smart-context-service";
 import { UsageTrackingService } from "./usage-tracking-service";
 import { ToolContextService } from "./tool-context-service";
+import { SummarizationQueueService } from "./summarization-queue-service";
 import {
   AgentConfig,
   AgentRequest,
@@ -31,6 +32,7 @@ export class AgentService {
   private smartContextService: SmartContextService;
   private usageTrackingService: UsageTrackingService;
   private toolContextService: ToolContextService;
+  private summarizationQueueService: SummarizationQueueService;
   private config: AgentConfig;
 
   constructor(
@@ -85,6 +87,7 @@ export class AgentService {
     );
 
     this.toolContextService = new ToolContextService();
+    this.summarizationQueueService = SummarizationQueueService.getInstance();
 
     this.config = {
       model: process.env.DEFAULT_AGENT_MODEL || "gpt-4o-mini",
@@ -112,7 +115,7 @@ You are a conversational AI assistant with excellent memory and natural communic
 - If you find related topics when searching your memory but they don't exactly match what the user asked about, suggest them: "I think you might be referring to [topic] that we discussed earlier. Is that what you meant?"
 
 ## MEMORY AND CONTEXT USAGE
-- You have access to our entire conversation history through semantic search tools AND only the last 1 turn of our conversation is immediately available
+- You have access to our entire conversation history through semantic search tools AND only the last 3 turn of our conversation is immediately available
 - **CRITICAL: ALWAYS USE TOOLS FOR MEMORY SEARCHES**:
   * **For ANY recall questions**: ALWAYS use semantic_topic_search or date_based_topic_search tools to find information from our conversation history
   * **For general questions**: Use tools to search for relevant context before answering
@@ -123,7 +126,7 @@ You are a conversational AI assistant with excellent memory and natural communic
   * When user asks general questions that might benefit from historical context → Use semantic_topic_search to find relevant background
   * Don't rely only on the minimal immediate context - actively search your memory
 - **Context Strategy**:
-  * Immediate context (last 1 turn) is minimal by design to encourage tool usage
+  * Immediate context (last 3 turn) is minimal by design to encourage tool usage
   * Use tools proactively to gather comprehensive context for better responses
   * Combine tool search results with immediate context for complete understanding
 - When users reference something we talked about before, ALWAYS use tools to search your memory
@@ -191,6 +194,22 @@ You are a conversational AI assistant with excellent memory and natural communic
           conversationId,
         });
       }
+    }
+
+    // Check if summarization is ongoing for this conversation and wait if needed
+    if (this.summarizationQueueService.isSummarizationActive(conversationId)) {
+      console.log("⏳ [AGENT] Waiting for ongoing summarization to complete:", {
+        conversationId,
+        timestamp: new Date().toISOString(),
+      });
+      await this.summarizationQueueService.waitForSummarization(conversationId);
+      console.log(
+        "✅ [AGENT] Summarization completed, proceeding with message:",
+        {
+          conversationId,
+          timestamp: new Date().toISOString(),
+        }
+      );
     }
 
     try {
@@ -1642,13 +1661,13 @@ ${JSON.stringify(context.data, null, 2)}`;
 
     switch (strategy) {
       case "none":
-        return `**Focus**: This appears to be a standalone query. You have minimal immediate context (last 1 turn). Use tools to search for any relevant background if needed. ${qualityIndicator}${confidenceNote}`;
+        return `**Focus**: This appears to be a standalone query. You have minimal immediate context (last 3 turn). Use tools to search for any relevant background if needed. ${qualityIndicator}${confidenceNote}`;
 
       case "recent_only":
-        return `**Focus**: This query relates to recent conversation. You have the last 1 turn available, but use tools to search for additional recent context if the user references anything beyond the immediate exchange. ${qualityIndicator}${confidenceNote}`;
+        return `**Focus**: This query relates to recent conversation. You have the last 3 turn available, but use tools to search for additional recent context if the user references anything beyond the immediate exchange. ${qualityIndicator}${confidenceNote}`;
 
       case "semantic_search":
-        return `**Focus**: This query requires specific historical knowledge. Use the retrieved summaries and historical context from tools as your primary source. The minimal immediate context (last 1 turn) is just for conversational flow. ${qualityIndicator}${confidenceNote}`;
+        return `**Focus**: This query requires specific historical knowledge. Use the retrieved summaries and historical context from tools as your primary source. The minimal immediate context (last 3 turn) is just for conversational flow. ${qualityIndicator}${confidenceNote}`;
 
       case "date_based_search":
         return `**Focus**: This query is about specific time periods. Use the retrieved historical context from tools as your main source. The immediate context is minimal - rely on the date-based search results. ${qualityIndicator}${confidenceNote}`;
@@ -1661,13 +1680,13 @@ ${JSON.stringify(context.data, null, 2)}`;
         if (relationshipToHistory === "recall") {
           return `**Focus**: This is a RECALL query - user is asking to remember/recall something from past conversation. ALWAYS use tools to search conversation history. Don't rely on minimal immediate context. ${qualityIndicator}${confidenceNote}`;
         } else if (relationshipToHistory === "continuation") {
-          return `**Focus**: This appears to be a continuation. You have minimal immediate context (last 1 turn). Use tools to search for relevant context if the user references anything beyond the immediate exchange. ${qualityIndicator}${confidenceNote}`;
+          return `**Focus**: This appears to be a continuation. You have minimal immediate context (last 3 turn). Use tools to search for relevant context if the user references anything beyond the immediate exchange. ${qualityIndicator}${confidenceNote}`;
         } else if (relationshipToHistory === "new_topic") {
           return `**Focus**: This appears to be a new topic. Use tools to search for any relevant background context that might be helpful. ${qualityIndicator}${confidenceNote}`;
         } else if (relationshipToHistory === "clarification") {
           return `**Focus**: This appears to be a clarification request. Use tools to search for the context being clarified. Don't rely only on minimal immediate context. ${qualityIndicator}${confidenceNote}`;
         } else {
-          return `**Focus**: You have minimal immediate context (last 1 turn). Use tools to search for relevant historical context as needed for this query. ${qualityIndicator}${confidenceNote}`;
+          return `**Focus**: You have minimal immediate context (last 3 turn). Use tools to search for relevant historical context as needed for this query. ${qualityIndicator}${confidenceNote}`;
         }
     }
   }
@@ -1683,15 +1702,15 @@ ${JSON.stringify(context.data, null, 2)}`;
     try {
       // Reduced to 1 turn (2 messages) to force tool usage for better recall
       // This provides minimal immediate context to encourage using tools for historical context
-      let recentMessageLimit = 2; // Minimum: last 1 turn (reduced from 3 turns)
+      let recentMessageLimit = 6; // Minimum: last 1 turn (reduced from 3 turns)
 
       // Adjust based on context retrieval strategy
       switch (intentAnalysis.contextRetrievalStrategy) {
         case "none":
-          recentMessageLimit = 2; // Only last 1 turn for immediate context
+          recentMessageLimit = 6; // Only last 1 turn for immediate context
           break;
         case "recent_only":
-          recentMessageLimit = 2; // Last 1 turn
+          recentMessageLimit = 6; // Last 1 turn
           break;
         case "semantic_search":
         case "date_based_search":
@@ -1994,17 +2013,44 @@ ${JSON.stringify(context.data, null, 2)}`;
         });
       }
 
-      // Check and create summaries if needed
-      try {
-        await this.conversationSummaryService.checkAndCreateSummary(
-          context.conversationId!,
-          savedUserMessageId,
-          context.userId
-        );
-      } catch (summaryError) {
-        console.error("Error creating conversation summary:", summaryError);
-        // Don't throw here to avoid breaking the response flow
-      }
+      // Start asynchronous summarization without blocking the response
+      this.summarizationQueueService.startSummarization(
+        context.conversationId!,
+        async () => {
+          try {
+            console.log(
+              "🔄 [SUMMARIZATION] Starting background summarization:",
+              {
+                conversationId: context.conversationId,
+                timestamp: new Date().toISOString(),
+              }
+            );
+
+            await this.conversationSummaryService.checkAndCreateSummary(
+              context.conversationId!,
+              savedUserMessageId,
+              context.userId
+            );
+
+            console.log(
+              "✅ [SUMMARIZATION] Background summarization completed:",
+              {
+                conversationId: context.conversationId,
+                timestamp: new Date().toISOString(),
+              }
+            );
+          } catch (summaryError) {
+            console.error(
+              "❌ [SUMMARIZATION] Error in background summarization:",
+              {
+                conversationId: context.conversationId,
+                error: summaryError,
+                timestamp: new Date().toISOString(),
+              }
+            );
+          }
+        }
+      );
     } catch (error) {
       console.error("Error persisting conversation:", error);
       // Don't throw here to avoid breaking the response flow
