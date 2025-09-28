@@ -113,7 +113,7 @@ export function ContextSidebar({
 
   if (!conversationId) {
     return (
-      <Card className="w-80 h-full">
+      <Card className="w-80 h-full rounded-none">
         <CardHeader>
           <CardTitle className="flex gap-2 items-center">
             <Brain className="w-5 h-5" />
@@ -148,7 +148,7 @@ export function ContextSidebar({
         {isPingingActive && (
           <div className="mx-4 mb-2">
             <Badge variant="outline" className="text-xs">
-              <Clock className="w-3 h-3 mr-1" />
+              <Clock className="mr-1 w-3 h-3" />
               Live Updates Active
             </Badge>
           </div>
@@ -216,7 +216,7 @@ export function ContextSidebar({
                           <div className="space-y-2">
                             {/* Current Intent */}
                             <div>
-                              <h4 className="text-xs font-medium text-muted-foreground mb-1">
+                              <h4 className="mb-1 text-xs font-medium text-muted-foreground">
                                 Intent
                               </h4>
                               <p className="text-sm leading-tight">
@@ -228,7 +228,7 @@ export function ContextSidebar({
                             {(result.keyTopics || analysis.keyTopics)?.length >
                               0 && (
                               <div>
-                                <h4 className="text-xs font-medium text-muted-foreground mb-1">
+                                <h4 className="mb-1 text-xs font-medium text-muted-foreground">
                                   Topics
                                 </h4>
                                 <div className="flex flex-wrap gap-1">
@@ -248,7 +248,7 @@ export function ContextSidebar({
                             )}
 
                             {/* Contextual Relevance */}
-                            <div className="flex items-center justify-between">
+                            <div className="flex justify-between items-center">
                               <h4 className="text-xs font-medium text-muted-foreground">
                                 Relevance
                               </h4>
@@ -276,7 +276,7 @@ export function ContextSidebar({
 
                             {/* Relationship to History */}
                             {result.relationshipToHistory && (
-                              <div className="flex items-center justify-between">
+                              <div className="flex justify-between items-center">
                                 <h4 className="text-xs font-medium text-muted-foreground">
                                   Relationship
                                 </h4>
@@ -295,7 +295,7 @@ export function ContextSidebar({
                               analysis.pendingQuestions
                             )?.length > 0 && (
                               <div>
-                                <h4 className="text-xs font-medium text-muted-foreground mb-1">
+                                <h4 className="mb-1 text-xs font-medium text-muted-foreground">
                                   Pending Questions
                                 </h4>
                                 <ul className="space-y-0.5 text-xs text-muted-foreground">
@@ -314,10 +314,10 @@ export function ContextSidebar({
                             {/* Last Assistant Question */}
                             {result.lastAssistantQuestion && (
                               <div>
-                                <h4 className="text-xs font-medium text-muted-foreground mb-1">
+                                <h4 className="mb-1 text-xs font-medium text-muted-foreground">
                                   Last Question
                                 </h4>
-                                <p className="text-xs text-muted-foreground leading-tight">
+                                <p className="text-xs leading-tight text-muted-foreground">
                                   {result.lastAssistantQuestion}
                                 </p>
                               </div>
@@ -326,10 +326,10 @@ export function ContextSidebar({
                             {/* Compressed Context */}
                             {result.compressedContext && (
                               <div>
-                                <h4 className="text-xs font-medium text-muted-foreground mb-1">
+                                <h4 className="mb-1 text-xs font-medium text-muted-foreground">
                                   Context
                                 </h4>
-                                <p className="text-xs text-muted-foreground leading-tight">
+                                <p className="text-xs leading-tight text-muted-foreground">
                                   {result.compressedContext}
                                 </p>
                               </div>
@@ -378,7 +378,7 @@ export function ContextSidebar({
                       <CardContent className="p-4">
                         <div className="space-y-3">
                           {/* Header with Summary Level and Message Count */}
-                          <div className="flex justify-between items-start gap-2">
+                          <div className="flex gap-2 justify-between items-start">
                             <Badge
                               variant="outline"
                               className={`text-xs px-2 py-0.5 h-auto ${getSummaryLevelColor(
@@ -400,10 +400,10 @@ export function ContextSidebar({
 
                           {/* Summary Text */}
                           <div>
-                            <h4 className="text-xs font-medium text-muted-foreground mb-1">
+                            <h4 className="mb-1 text-xs font-medium text-muted-foreground">
                               Summary
                             </h4>
-                            <p className="text-sm text-muted-foreground leading-tight">
+                            <p className="text-sm leading-tight text-muted-foreground">
                               {summary.summaryText}
                             </p>
                           </div>
@@ -411,7 +411,7 @@ export function ContextSidebar({
                           {/* Topic Information */}
                           {summary.topicName && (
                             <div>
-                              <h4 className="text-xs font-medium text-muted-foreground mb-1">
+                              <h4 className="mb-1 text-xs font-medium text-muted-foreground">
                                 Topic
                               </h4>
                               <div className="flex flex-wrap gap-1 mb-2">
@@ -440,7 +440,7 @@ export function ContextSidebar({
                               {summary.relatedTopics &&
                                 summary.relatedTopics.length > 0 && (
                                   <div>
-                                    <h5 className="text-xs font-medium text-muted-foreground mb-1">
+                                    <h5 className="mb-1 text-xs font-medium text-muted-foreground">
                                       Related Topics
                                     </h5>
                                     <div className="flex flex-wrap gap-1">
@@ -462,14 +462,14 @@ export function ContextSidebar({
                           )}
 
                           {/* Message Range Info */}
-                          <div className="flex items-center justify-between text-xs text-muted-foreground">
-                            <div className="flex items-center gap-1">
+                          <div className="flex justify-between items-center text-xs text-muted-foreground">
+                            <div className="flex gap-1 items-center">
                               <Target className="w-3 h-3" />
                               <span>
                                 Range: {summary.messageRange.messageCount} msgs
                               </span>
                             </div>
-                            <div className="flex items-center gap-1">
+                            <div className="flex gap-1 items-center">
                               <Clock className="w-3 h-3" />
                               {formatDate(summary.createdAt)}
                             </div>

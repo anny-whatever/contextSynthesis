@@ -1,9 +1,33 @@
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, BarChart, Bar, XAxis, YAxis, CartesianGrid } from "recharts";
+import {
+  PieChart,
+  Pie,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+} from "recharts";
 import { AnalyticsApiService } from "@/services/analyticsApi";
 
 interface OperationData {
@@ -22,18 +46,29 @@ interface OperationBreakdownProps {
   detailed?: boolean;
 }
 
-const COLORS = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4'];
+const COLORS = [
+  "#3b82f6",
+  "#10b981",
+  "#f59e0b",
+  "#ef4444",
+  "#8b5cf6",
+  "#06b6d4",
+];
 
 const OPERATION_LABELS: Record<string, string> = {
-  AGENT_COMPLETION: 'Agent Completion',
-  INTENT_ANALYSIS: 'Intent Analysis',
-  SUMMARIZATION: 'Summarization',
-  TOPIC_EXTRACTION: 'Topic Extraction',
-  TOOL_CALL: 'Tool Call',
-  EMBEDDING_GENERATION: 'Embedding Generation',
+  AGENT_COMPLETION: "Agent Completion",
+  INTENT_ANALYSIS: "Intent Analysis",
+  SUMMARIZATION: "Summarization",
+  TOPIC_EXTRACTION: "Topic Extraction",
+  TOOL_CALL: "Tool Call",
+  EMBEDDING_GENERATION: "Embedding Generation",
+  BEHAVIORAL_MEMORY: "Behavioral Memory",
 };
 
-export function OperationBreakdown({ timeframe, detailed = false }: OperationBreakdownProps) {
+export function OperationBreakdown({
+  timeframe,
+  detailed = false,
+}: OperationBreakdownProps) {
   const [data, setData] = useState<OperationData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -46,7 +81,7 @@ export function OperationBreakdown({ timeframe, detailed = false }: OperationBre
         setData(result.data.usageByOperation || []);
         setError(null);
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred');
+        setError(err instanceof Error ? err.message : "An error occurred");
       } finally {
         setLoading(false);
       }
@@ -56,15 +91,15 @@ export function OperationBreakdown({ timeframe, detailed = false }: OperationBre
   }, [timeframe]);
 
   const formatCurrency = (amount: number) => {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: 'USD',
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency: "USD",
       minimumFractionDigits: 4,
     }).format(amount);
   };
 
   const formatNumber = (num: number) => {
-    return new Intl.NumberFormat('en-US').format(num);
+    return new Intl.NumberFormat("en-US").format(num);
   };
 
   const formatDuration = (ms: number) => {
@@ -78,7 +113,7 @@ export function OperationBreakdown({ timeframe, detailed = false }: OperationBre
 
   if (loading) {
     return (
-      <div className={`grid gap-4 ${detailed ? 'grid-cols-1' : 'grid-cols-1'}`}>
+      <div className={`grid gap-4 ${detailed ? "grid-cols-1" : "grid-cols-1"}`}>
         <Card>
           <CardHeader>
             <Skeleton className="h-6 w-32" />
@@ -130,12 +165,14 @@ export function OperationBreakdown({ timeframe, detailed = false }: OperationBre
   }));
 
   return (
-    <div className={`grid gap-4 ${detailed ? 'grid-cols-1' : 'grid-cols-1'}`}>
+    <div className={`grid gap-4 ${detailed ? "grid-cols-1" : "grid-cols-1"}`}>
       {/* Pie Chart */}
       <Card>
         <CardHeader>
           <CardTitle>Operations by Count</CardTitle>
-          <CardDescription>Distribution of API calls by operation type</CardDescription>
+          <CardDescription>
+            Distribution of API calls by operation type
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <ResponsiveContainer width="100%" height={300}>
@@ -145,7 +182,9 @@ export function OperationBreakdown({ timeframe, detailed = false }: OperationBre
                 cx="50%"
                 cy="50%"
                 labelLine={false}
-                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                label={({ name, percent }) =>
+                  `${name} ${(percent * 100).toFixed(0)}%`
+                }
                 outerRadius={80}
                 fill="#8884d8"
                 dataKey="value"
@@ -154,7 +193,9 @@ export function OperationBreakdown({ timeframe, detailed = false }: OperationBre
                   <Cell key={`cell-${index}`} fill={entry.color} />
                 ))}
               </Pie>
-              <Tooltip formatter={(value: number) => [formatNumber(value), 'Count']} />
+              <Tooltip
+                formatter={(value: number) => [formatNumber(value), "Count"]}
+              />
             </PieChart>
           </ResponsiveContainer>
         </CardContent>
@@ -171,19 +212,16 @@ export function OperationBreakdown({ timeframe, detailed = false }: OperationBre
             <ResponsiveContainer width="100%" height={300}>
               <BarChart data={barData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis 
-                  dataKey="name" 
+                <XAxis
+                  dataKey="name"
                   fontSize={12}
                   angle={-45}
                   textAnchor="end"
                   height={80}
                 />
-                <YAxis 
-                  tickFormatter={formatCurrency}
-                  fontSize={12}
-                />
-                <Tooltip 
-                  formatter={(value: number) => [formatCurrency(value), 'Cost']}
+                <YAxis tickFormatter={formatCurrency} fontSize={12} />
+                <Tooltip
+                  formatter={(value: number) => [formatCurrency(value), "Cost"]}
                 />
                 <Bar dataKey="cost" fill="#10b981" />
               </BarChart>
@@ -197,7 +235,9 @@ export function OperationBreakdown({ timeframe, detailed = false }: OperationBre
         <Card>
           <CardHeader>
             <CardTitle>Operation Details</CardTitle>
-            <CardDescription>Detailed breakdown of all operations</CardDescription>
+            <CardDescription>
+              Detailed breakdown of all operations
+            </CardDescription>
           </CardHeader>
           <CardContent>
             <Table>
@@ -215,9 +255,11 @@ export function OperationBreakdown({ timeframe, detailed = false }: OperationBre
                   <TableRow key={item.operationType}>
                     <TableCell>
                       <div className="flex items-center gap-2">
-                        <div 
-                          className="w-3 h-3 rounded-full" 
-                          style={{ backgroundColor: COLORS[index % COLORS.length] }}
+                        <div
+                          className="w-3 h-3 rounded-full"
+                          style={{
+                            backgroundColor: COLORS[index % COLORS.length],
+                          }}
                         />
                         <span className="font-medium">
                           {getOperationLabel(item.operationType)}

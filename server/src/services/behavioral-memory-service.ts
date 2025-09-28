@@ -1,5 +1,6 @@
 import OpenAI from "openai";
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient, UsageOperationType } from "@prisma/client";
+import { UsageTrackingService } from "./usage-tracking-service";
 
 export interface BehavioralMemoryUpdate {
   conversationId: string;
@@ -11,10 +12,12 @@ export interface BehavioralMemoryUpdate {
 export class BehavioralMemoryService {
   private openai: OpenAI;
   private prisma: PrismaClient;
+  private usageTrackingService: UsageTrackingService;
 
   constructor(openai?: OpenAI, prisma?: PrismaClient) {
     this.openai = openai || new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
     this.prisma = prisma || new PrismaClient();
+    this.usageTrackingService = new UsageTrackingService(this.prisma);
   }
 
   /**
@@ -35,7 +38,9 @@ export class BehavioralMemoryService {
       // Analyze the prompt and update memory using AI
       const updatedMemoryData = await this.analyzeAndUpdateMemory(
         userPrompt,
-        existingMemory || ""
+        existingMemory || "",
+        conversationId
+        // Note: userId is not available in this context, but we can get it from conversation if needed
       );
 
       // Save to database
@@ -137,7 +142,9 @@ export class BehavioralMemoryService {
    */
   private async analyzeAndUpdateMemory(
     userPrompt: string,
-    existingMemory: string
+    existingMemory: string,
+    conversationId?: string,
+    userId?: string
   ): Promise<{ memory: string; changes: string[]; wordCount: number }> {
     const systemPrompt = `You are a behavioral memory analyst that extracts and maintains user communication preferences from their prompts.
 
@@ -183,6 +190,8 @@ CRITICAL: The response should have the attributes below
 
 If no behavioral cues are detected in the prompt, return the existing memory unchanged with empty changes array.`;
 
+    const startTime = Date.now();
+
     const completion = await this.openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
@@ -196,7 +205,41 @@ If no behavioral cues are detected in the prompt, return the existing memory unc
       max_tokens: 800,
     });
 
+    const duration = Date.now() - startTime;
     const response = completion.choices[0]?.message?.content;
+
+    // Track usage costs
+    if (completion.usage && conversationId) {
+      try {
+        const trackingData: any = {
+          conversationId,
+          operationType: UsageOperationType.BEHAVIORAL_MEMORY,
+          model: "gpt-4o-mini",
+          inputTokens: completion.usage.prompt_tokens,
+          outputTokens: completion.usage.completion_tokens,
+          duration,
+          success: !!response,
+          metadata: {
+            existingMemoryLength: existingMemory.length,
+            userPromptLength: userPrompt.length,
+          },
+        };
+
+        // Only include userId if it exists
+        if (userId) {
+          trackingData.userId = userId;
+        }
+
+        await this.usageTrackingService.trackUsage(trackingData);
+      } catch (trackingError) {
+        console.warn(
+          "⚠️ [BEHAVIORAL MEMORY] Failed to track usage:",
+          trackingError
+        );
+        // Don't fail the entire operation if tracking fails
+      }
+    }
+
     if (!response) {
       throw new Error("No response from OpenAI");
     }

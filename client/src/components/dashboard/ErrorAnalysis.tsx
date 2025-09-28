@@ -57,6 +57,7 @@ const OPERATION_LABELS: Record<string, string> = {
   TOPIC_EXTRACTION: "Topic Extraction",
   TOOL_CALL: "Tool Call",
   EMBEDDING_GENERATION: "Embedding Generation",
+  BEHAVIORAL_MEMORY: "Behavioral Memory",
 };
 
 export function ErrorAnalysis({ timeframe }: ErrorAnalysisProps) {
