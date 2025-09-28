@@ -12,6 +12,7 @@ import {
 } from "./conversation-summary-service";
 import { SmartContextService } from "./smart-context-service";
 import { UsageTrackingService } from "./usage-tracking-service";
+import { ToolContextService } from "./tool-context-service";
 import {
   AgentConfig,
   AgentRequest,
@@ -29,6 +30,7 @@ export class AgentService {
   private conversationSummaryService: ConversationSummaryService;
   private smartContextService: SmartContextService;
   private usageTrackingService: UsageTrackingService;
+  private toolContextService: ToolContextService;
   private config: AgentConfig;
 
   constructor(
@@ -77,6 +79,8 @@ export class AgentService {
       dateBasedSearchTool as any
     );
 
+    this.toolContextService = new ToolContextService();
+
     this.config = {
       model: process.env.DEFAULT_AGENT_MODEL || "gpt-4o-mini",
       temperature: parseFloat(process.env.AGENT_TEMPERATURE || "0.7"),
@@ -93,7 +97,8 @@ export class AgentService {
   }
 
   private getDefaultSystemPrompt(): string {
-    return `You are a conversational AI assistant with excellent memory and natural communication skills. You remember our conversations and can recall topics we've discussed, even from long ago, with more recent topics being easier to access.
+    return `## CORE IDENTITY
+You are a conversational AI assistant with excellent memory and natural communication skills. You remember our conversations and can recall topics we've discussed, even from long ago, with more recent topics being easier to access.
 
 ## CONVERSATION STYLE
 - Communicate naturally like a knowledgeable friend, not in bullet points unless specifically requested
@@ -361,7 +366,16 @@ export class AgentService {
           totalDuration: toolResults.reduce((sum, r) => sum + r.duration, 0),
         });
 
-        // Create follow-up completion with tool results
+        // Process tool results with enhanced context
+        const contextualizedToolResults =
+          await this.processToolResultsWithContext(
+            toolResults,
+            request.message,
+            updatedIntentAnalysis,
+            assistantMessage.tool_calls
+          );
+
+        // Create follow-up completion with enhanced tool results
         const toolMessages = [
           ...messages,
           {
@@ -369,12 +383,7 @@ export class AgentService {
             content: assistantMessage.content,
             tool_calls: assistantMessage.tool_calls,
           },
-          ...toolResults.map((result, index) => ({
-            role: "tool" as const,
-            tool_call_id:
-              assistantMessage.tool_calls![index]?.id || `tool_${index}`,
-            content: JSON.stringify(result.output),
-          })),
+          ...contextualizedToolResults,
         ];
 
         const followUpParams: any = {
@@ -573,6 +582,384 @@ export class AgentService {
     }
   }
 
+  /**
+   * Process tool results with rich context and explanations
+   */
+  private async processToolResultsWithContext(
+    toolResults: ToolUsageContext[],
+    userQuery: string,
+    intentAnalysis: IntentAnalysisResult,
+    toolCalls: any[]
+  ): Promise<any[]> {
+    const contextualizedResults = [];
+
+    for (let i = 0; i < toolResults.length; i++) {
+      const result = toolResults[i];
+      const toolCall = toolCalls[i];
+      const toolCallId = toolCall?.id || `tool_${i}`;
+
+      if (!result) continue;
+
+      if (result.success) {
+        // Create mock reasoning for now - in a real implementation, this would come from the tool selection process
+        const mockReasoning = {
+          intentAnalysis: {
+            userIntent: intentAnalysis.currentIntent,
+            keyTopics: intentAnalysis.keyTopics,
+            temporalReferences: intentAnalysis.dateQuery
+              ? [intentAnalysis.dateQuery]
+              : [],
+            needsHistoricalContext:
+              intentAnalysis.contextRetrievalStrategy !== "none",
+          },
+          toolSelection: {
+            selectedTool: result.toolName,
+            reason: `Selected ${
+              result.toolName
+            } to address user's query about ${intentAnalysis.keyTopics.join(
+              ", "
+            )}`,
+            alternativeTools: [],
+            confidence: intentAnalysis.confidenceScore,
+          },
+          searchStrategy: {
+            strategy: intentAnalysis.contextRetrievalStrategy,
+            queries: intentAnalysis.keyTopics,
+            parameters: result.input,
+            expectedResults: `Relevant information about ${intentAnalysis.keyTopics.join(
+              ", "
+            )}`,
+          },
+        };
+
+        const metadata = {
+          executionTime: result.duration,
+          success: result.success,
+          resultCount: Array.isArray(result.output?.data)
+            ? result.output.data.length
+            : 1,
+          confidence: intentAnalysis.confidenceScore,
+        };
+
+        const contextualizedResult =
+          this.toolContextService.createContextualizedResult(
+            result.toolName,
+            userQuery,
+            intentAnalysis,
+            result.output,
+            metadata,
+            mockReasoning
+          );
+
+        // Create actionable tool message instead of complex JSON
+        const timeframe = this.extractTimeframe(result.toolName, result.output);
+        const results = {
+          summary: this.generateResultsSummary(result.toolName, result.output),
+          action: this.generateActionInstructions(
+            result.toolName,
+            result.output,
+            intentAnalysis
+          ),
+          relevance: this.calculateRelevance(
+            result.toolName,
+            result.output,
+            intentAnalysis
+          ),
+          ...(timeframe && { timeframe }),
+        };
+
+        const actionableMessage = this.createActionableToolMessage({
+          userRequest: userQuery,
+          toolExecution: {
+            name: result.toolName,
+            reason: this.generateExecutionReason(
+              result.toolName,
+              intentAnalysis
+            ),
+            timestamp: new Date().toISOString(),
+          },
+          results,
+          data: result.output,
+          confidence: intentAnalysis.confidenceScore || 0.8,
+        });
+
+        contextualizedResults.push({
+          role: "tool" as const,
+          tool_call_id: toolCallId,
+          content: actionableMessage,
+        });
+      } else {
+        // For failed tools, provide clear error context
+        const errorMessage = this.createActionableToolMessage({
+          userRequest: userQuery,
+          toolExecution: {
+            name: result.toolName,
+            reason: this.generateExecutionReason(
+              result.toolName,
+              intentAnalysis
+            ),
+            timestamp: new Date().toISOString(),
+          },
+          results: {
+            summary: `Tool execution failed: ${result.error}`,
+            action:
+              "Let the user know the tool failed and suggest alternative approaches or rephrasing their request.",
+            relevance: "ERROR - tool execution failed",
+          },
+          data: { success: false, error: result.error },
+          confidence: 0,
+        });
+
+        contextualizedResults.push({
+          role: "tool" as const,
+          tool_call_id: toolCallId,
+          content: errorMessage,
+        });
+      }
+    }
+
+    return contextualizedResults;
+  }
+
+  /**
+   * Creates actionable tool message for AI consumption
+   */
+  private createActionableToolMessage(context: {
+    userRequest: string;
+    toolExecution: {
+      name: string;
+      reason: string;
+      timestamp: string;
+    };
+    results: {
+      summary: string;
+      action: string;
+      relevance: string;
+      timeframe?: string;
+    };
+    data: any;
+    confidence: number;
+  }): string {
+    // Create clear, direct instructions based on tool type and results
+    const resultCount = this.getResultCount(context.data);
+
+    if (resultCount === 0) {
+      return `❌ NO RESULTS FOUND
+Tool: ${context.toolExecution.name}
+Query: "${context.userRequest}"
+
+INSTRUCTION: Tell the user no matching information was found and suggest alternative approaches.`;
+    }
+
+    // For successful results, be very explicit about what to do
+    let instruction: string;
+
+    if (context.toolExecution.name.includes("search")) {
+      instruction = `✅ SEARCH RESULTS FOUND - USE THESE TO ANSWER THE USER'S QUESTION
+Found ${resultCount} relevant result${resultCount === 1 ? "" : "s"} for: "${
+        context.userRequest
+      }"
+${context.results.timeframe ? `Timeframe: ${context.results.timeframe}` : ""}
+
+CRITICAL: The user asked about past conversations. These search results ARE the information they're looking for. Reference the specific topics, details, and information found below to answer their question completely.`;
+    } else {
+      instruction = `✅ TOOL RESULTS - USE THIS INFORMATION
+Tool: ${context.toolExecution.name}
+Results: ${context.results.summary}
+
+INSTRUCTION: ${context.results.action}`;
+    }
+
+    return `${instruction}
+
+📋 DATA TO REFERENCE:
+${JSON.stringify(context.data, null, 2)}`;
+  }
+
+  /**
+   * Generates execution reason based on tool and intent
+   */
+  private generateExecutionReason(
+    toolName: string,
+    intentAnalysis: IntentAnalysisResult
+  ): string {
+    const reasonMap: Record<string, string> = {
+      date_based_topic_search: `User asked about ${
+        intentAnalysis.dateQuery || "date-specific content"
+      } - executed date-based search`,
+      semantic_topic_search: `User asked about specific topics: ${intentAnalysis.keyTopics.join(
+        ", "
+      )} - executed semantic search`,
+      topic_count_tool: `User requested count/statistics about conversation topics`,
+      conversation_summary_tool: `User requested conversation summary or overview`,
+    };
+
+    return (
+      reasonMap[toolName] ||
+      `Executed ${toolName} to address user's query about ${intentAnalysis.keyTopics.join(
+        ", "
+      )}`
+    );
+  }
+
+  /**
+   * Generates clear results summary from tool output
+   */
+  private generateResultsSummary(toolName: string, output: any): string {
+    if (!output?.data) return "No results found";
+
+    const data = output.data;
+
+    // Handle date-based topic search
+    if (toolName === "date_based_topic_search") {
+      const topics = data.topics || [];
+      const totalFound = data.totalFound || topics.length;
+      const hasMore = data.hasMoreTopics;
+
+      let summary = `Found ${totalFound} topic${totalFound === 1 ? "" : "s"}`;
+      if (data.parsedTime?.startDate) {
+        const startDate = new Date(
+          data.parsedTime.startDate
+        ).toLocaleDateString();
+        const endDate = new Date(data.parsedTime.endDate).toLocaleDateString();
+        summary += ` from ${
+          startDate === endDate ? startDate : `${startDate} to ${endDate}`
+        }`;
+      }
+      if (hasMore) {
+        summary += ` (showing top ${topics.length})`;
+      }
+      return summary;
+    }
+
+    // Handle semantic topic search
+    if (toolName === "semantic_topic_search") {
+      const results = data.results || [];
+      return `Found ${results.length} semantically related topic${
+        results.length === 1 ? "" : "s"
+      }`;
+    }
+
+    // Handle topic count
+    if (toolName === "topic_count_tool") {
+      const count = data.count || 0;
+      return `Found ${count} total topics in conversation`;
+    }
+
+    // Generic fallback
+    const count = Array.isArray(data)
+      ? data.length
+      : data.results?.length || data.topics?.length || 1;
+    return `Found ${count} result${count === 1 ? "" : "s"}`;
+  }
+
+  /**
+   * Generates specific action instructions based on tool results
+   */
+  private generateActionInstructions(
+    toolName: string,
+    output: any,
+    intentAnalysis: IntentAnalysisResult
+  ): string {
+    if (toolName.includes("search")) {
+      const count = this.getResultCount(output);
+      if (count === 0) {
+        return "No matching results found. Let the user know and suggest alternative approaches or different search terms.";
+      }
+
+      let instructions = `USE THESE ${count} RESULT${
+        count === 1 ? "" : "S"
+      } to answer the user's question comprehensively.`;
+
+      // Add specific guidance based on intent
+      if (intentAnalysis.relationshipToHistory === "recall") {
+        instructions +=
+          " Reference specific topics, dates, and details mentioned in the results to help the user recall the conversation.";
+      } else if (intentAnalysis.dateQuery) {
+        instructions +=
+          " Reference the specific timeframes and dates found in the results.";
+      } else {
+        instructions += " Reference the relevant topics and context found.";
+      }
+
+      return instructions;
+    }
+
+    if (toolName === "topic_count_tool") {
+      return "Provide the user with the topic count and any relevant statistics about their conversation.";
+    }
+
+    return "Use this information to respond to the user's request appropriately.";
+  }
+
+  /**
+   * Calculates relevance level based on results and intent
+   */
+  private calculateRelevance(
+    toolName: string,
+    output: any,
+    intentAnalysis: IntentAnalysisResult
+  ): string {
+    const count = this.getResultCount(output);
+
+    if (count === 0) return "NO RESULTS";
+
+    // High relevance for exact date matches
+    if (
+      toolName === "date_based_topic_search" &&
+      output?.data?.topics?.some((t: any) => t.timeMatch === "exact")
+    ) {
+      return "HIGH - exact date match";
+    }
+
+    // High relevance for good semantic matches
+    if (toolName === "semantic_topic_search" && count >= 3) {
+      return "HIGH - multiple relevant topics found";
+    }
+
+    // Medium relevance for partial matches
+    if (count >= 1) {
+      return "MEDIUM - relevant content found";
+    }
+
+    return "LOW - limited results";
+  }
+
+  /**
+   * Extracts timeframe information from tool output
+   */
+  private extractTimeframe(toolName: string, output: any): string | undefined {
+    if (toolName === "date_based_topic_search" && output?.data?.parsedTime) {
+      const { startDate, endDate } = output.data.parsedTime;
+      if (startDate && endDate) {
+        const start = new Date(startDate);
+        const end = new Date(endDate);
+
+        if (start.toDateString() === end.toDateString()) {
+          return `${start.toLocaleDateString()} (${start.toLocaleTimeString()} - ${end.toLocaleTimeString()})`;
+        } else {
+          return `${start.toLocaleDateString()} to ${end.toLocaleDateString()}`;
+        }
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Helper to get result count from various tool output formats
+   */
+  private getResultCount(output: any): number {
+    if (!output?.data) return 0;
+
+    const data = output.data;
+    return (
+      data.topics?.length ||
+      data.results?.length ||
+      data.count ||
+      (Array.isArray(data) ? data.length : 1)
+    );
+  }
+
   private async executeToolCalls(
     toolCalls: any[],
     conversationId?: string,
@@ -671,120 +1058,25 @@ export class AgentService {
     context: ConversationContext,
     intentAnalysis?: IntentAnalysisResult
   ): any[] {
-    let systemPrompt = this.config.systemPrompt;
-
-    // Add conversation summaries as context if they exist
-    const summaries = context.metadata?.summaries as any[];
-
-    // Debug logging for summaries
-    console.log("🔍 [DEBUG] Summary processing:", {
-      hasSummaries: !!summaries,
-      summariesLength: summaries?.length || 0,
-      metadata: context.metadata,
-      summariesData: summaries,
-    });
-
-    if (summaries && summaries.length > 0) {
-      console.log(
-        "📚 [SUMMARIES] Adding summaries to system prompt:",
-        summaries.length
+    // Use the new structured system prompt approach
+    const structuredPrompt =
+      this.toolContextService.buildStructuredSystemPrompt(
+        this.config.systemPrompt,
+        context,
+        intentAnalysis
       );
-      systemPrompt += `\n\n## CONVERSATION HISTORY SUMMARIES
-The following summaries provide context from earlier parts of this conversation:
 
-`;
-      summaries.forEach((summary, index) => {
-        console.log(`📚 [SUMMARY ${index + 1}] Adding summary:`, {
-          level: summary.summaryLevel,
-          messageCount: summary.messageRange?.messageCount,
-          relatedTopics: summary.relatedTopics,
-        });
+    const systemPrompt =
+      this.toolContextService.renderStructuredPrompt(structuredPrompt);
 
-        const relatedTopicsStr = Array.isArray(summary.relatedTopics)
-          ? summary.relatedTopics.join(", ")
-          : "No related topics";
-
-        systemPrompt += `**Summary ${index + 1} (Level ${
-          summary.summaryLevel
-        }):**
-${summary.summaryText}
-**Key Topics**: ${relatedTopicsStr}
-**Covers**: ${summary.messageRange?.messageCount || 0} messages
-
-`;
-      });
-
-      systemPrompt += `These summaries represent the conversation history. The recent messages below continue from where these summaries end.`;
-    } else {
-      console.log("📚 [SUMMARIES] No summaries found to add to system prompt");
-    }
-
-    // Add topic inference guidance if we have related but not exact matches
-    const smartContext = context.metadata?.smartContext as any;
-    if (
-      smartContext?.suggestRelatedTopics &&
-      !smartContext?.hasExactMatches &&
-      summaries &&
-      summaries.length > 0
-    ) {
-      systemPrompt += `\n\n## TOPIC INFERENCE GUIDANCE
-The user's query didn't find exact matches in our conversation history, but we found related topics that might be what they're referring to. 
-
-**Related topics found**: ${summaries.map((s) => s.topicName).join(", ")}
-**Search queries used**: ${smartContext.searchQueries?.join(", ") || "N/A"}
-
-IMPORTANT: Instead of saying "no previous mentions found", acknowledge the related topics and ask for clarification. For example:
-"I found some related discussions about [topic names]. Are you perhaps referring to our conversation about [specific topic]? If so, I can provide more details about that discussion."
-
-This creates a more natural, human-like conversation flow where you help the user connect to the right topic.`;
-    }
-
-    // Enhance system prompt with intent analysis context and dynamic context usage guidance
-    if (intentAnalysis) {
-      systemPrompt += `\n\n## CURRENT CONVERSATION CONTEXT
-**User Intent**: ${intentAnalysis.currentIntent}
-**Contextual Relevance**: ${intentAnalysis.contextualRelevance}
-**Relationship to History**: ${intentAnalysis.relationshipToHistory}
-**Key Topics**: ${intentAnalysis.keyTopics.join(", ")}
-**Compressed Context**: ${intentAnalysis.compressedContext}
-${
-  intentAnalysis.pendingQuestions.length > 0
-    ? `**Pending Questions**: ${intentAnalysis.pendingQuestions.join(", ")}`
-    : ""
-}
-${
-  intentAnalysis.lastAssistantQuestion
-    ? `**Last Assistant Question**: ${intentAnalysis.lastAssistantQuestion}`
-    : ""
-}
-
-## CONFIDENCE ASSESSMENT
-**Confidence Level**: ${intentAnalysis.confidenceLevel}
-**Confidence Score**: ${(intentAnalysis.confidenceScore * 100).toFixed(1)}%
-**Confidence Factors**:
-- Search Result Quality: ${(
-        intentAnalysis.confidenceFactors.searchResultQuality || 0.5 * 100
-      ).toFixed(1)}%
-- Context Availability: ${(
-        intentAnalysis.confidenceFactors.contextAvailability || 0.5 * 100
-      ).toFixed(1)}%
-- Query Specificity: ${(
-        intentAnalysis.confidenceFactors.querySpecificity || 0.5 * 100
-      ).toFixed(1)}%
-- Historical Match: ${(
-        intentAnalysis.confidenceFactors.historicalMatch || 0.5 * 100
-      ).toFixed(1)}%
-
-${this.getConfidenceGuidance(intentAnalysis)}
-
-## CONTEXT USAGE GUIDANCE FOR THIS QUERY
-**Strategy**: ${intentAnalysis.contextRetrievalStrategy}
-**Needs Historical Context**: ${intentAnalysis.needsHistoricalContext}
-
-${this.getContextUsageGuidance(intentAnalysis)}
-
-Use this context to provide more relevant and focused responses that align with the user's current intent and conversation flow.`;
-    }
+    // Debug logging for the new structured approach
+    console.log("🔧 [STRUCTURED PROMPT] Generated system prompt:", {
+      systemPromptLength: systemPrompt.length,
+      sections: Object.keys(structuredPrompt).length,
+      hasToolContext: !!structuredPrompt.toolContext,
+      hasConversationContext: !!structuredPrompt.conversationContext,
+      hasConfidenceAssessment: !!structuredPrompt.confidenceAssessment,
+    });
 
     const messages = [
       {
@@ -792,16 +1084,6 @@ Use this context to provide more relevant and focused responses that align with 
         content: systemPrompt,
       },
     ];
-
-    // Debug: Log the actual system prompt to verify summary inclusion
-    console.log("🔍 [DEBUG] System prompt content check:", {
-      systemPromptLength: systemPrompt.length,
-      includesSummarySection: systemPrompt.includes(
-        "## CONVERSATION HISTORY SUMMARIES"
-      ),
-      includesSummaryText: systemPrompt.includes("Summary 1"),
-      fullSystemPrompt: systemPrompt, // Show complete system prompt
-    });
 
     // Add conversation history (limit to latest 2 turns = 4 messages max)
     // This ensures we only send the most recent context, forcing the AI to use tools for historical context

@@ -94,6 +94,11 @@ export class IntentAnalysisService {
     if (initialAnalysis.contextRetrievalStrategy === "semantic_search") {
       // TODO: Implement semantic search based context loading
       finalContext = await this.loadConversationContext(conversationId);
+    } else if (
+      initialAnalysis.contextRetrievalStrategy === "date_based_search"
+    ) {
+      // Load context with date-based search results
+      finalContext = await this.loadConversationContext(conversationId);
     } else if (initialAnalysis.contextRetrievalStrategy === "all_available") {
       finalContext = await this.loadConversationContext(conversationId);
     } else if (initialAnalysis.contextRetrievalStrategy === "recent_only") {
