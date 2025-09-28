@@ -9,11 +9,13 @@ import {
 } from "../middleware/validation";
 import { asyncHandler } from "../middleware/error-handler";
 import { AgentService } from "../services/agent-service";
+import { BehavioralMemoryService } from "../services/behavioral-memory-service";
 import { encode } from "gpt-tokenizer";
 
 const router = Router();
 const prisma = new PrismaClient();
 const agentService = new AgentService();
+const behavioralMemoryService = new BehavioralMemoryService();
 
 // POST /api/chat - Send a message and get AI response
 router.post(
@@ -120,13 +122,13 @@ router.get(
     // Transform conversation messages to match frontend expected structure
     const transformedConversation = {
       ...conversation,
-      messages: conversation.messages.map(message => ({
+      messages: conversation.messages.map((message) => ({
         ...message,
-        toolUsages: message.toolUsages.map(toolUsage => ({
+        toolUsages: message.toolUsages.map((toolUsage) => ({
           toolName: toolUsage.toolName,
           input: toolUsage.input,
           output: toolUsage.output,
-          success: toolUsage.status === 'COMPLETED',
+          success: toolUsage.status === "COMPLETED",
           duration: toolUsage.duration,
           error: toolUsage.error,
         })),
@@ -189,13 +191,13 @@ router.get(
     });
 
     // Transform messages to match frontend expected structure
-    const transformedMessages = messages.map(message => ({
+    const transformedMessages = messages.map((message) => ({
       ...message,
-      toolUsages: message.toolUsages.map(toolUsage => ({
+      toolUsages: message.toolUsages.map((toolUsage) => ({
         toolName: toolUsage.toolName,
         input: toolUsage.input,
         output: toolUsage.output,
-        success: toolUsage.status === 'COMPLETED',
+        success: toolUsage.status === "COMPLETED",
         duration: toolUsage.duration,
         error: toolUsage.error,
       })),
@@ -518,6 +520,130 @@ router.get(
         breakdown,
       },
     });
+  })
+);
+
+// GET /api/chat/conversations/:id/behavioral-memory - Get behavioral memory for conversation
+router.get(
+  "/conversations/:id/behavioral-memory",
+  apiLimiter,
+  validateConversationId,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id: conversationId } = req.params;
+
+    if (!conversationId) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: "Conversation ID is required",
+          statusCode: 400,
+        },
+      });
+    }
+
+    try {
+      const behavioralMemory =
+        await behavioralMemoryService.getBehavioralMemory(conversationId);
+
+      return res.json({
+        success: true,
+        data: {
+          conversationId,
+          behavioralMemory: behavioralMemory || "",
+          wordCount: behavioralMemory
+            ? behavioralMemory.split(/\s+/).length
+            : 0,
+        },
+      });
+    } catch (error) {
+      console.error("Error getting behavioral memory:", error);
+      return res.status(500).json({
+        success: false,
+        error: {
+          message: "Failed to get behavioral memory",
+          statusCode: 500,
+        },
+      });
+    }
+  })
+);
+
+// PUT /api/chat/conversations/:id/behavioral-memory - Update behavioral memory for conversation
+router.put(
+  "/conversations/:id/behavioral-memory",
+  apiLimiter,
+  validateConversationId,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id: conversationId } = req.params;
+    const { behavioralMemory } = req.body;
+
+    if (!conversationId) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: "Conversation ID is required",
+          statusCode: 400,
+        },
+      });
+    }
+
+    if (typeof behavioralMemory !== "string") {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: "Behavioral memory must be a string",
+          statusCode: 400,
+        },
+      });
+    }
+
+    // Validate word count
+    const wordCount = behavioralMemory.trim().split(/\s+/).length;
+    if (wordCount > 300) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: `Behavioral memory too long: ${wordCount} words (max 300)`,
+          statusCode: 400,
+        },
+      });
+    }
+
+    try {
+      const success = await behavioralMemoryService.setBehavioralMemory(
+        conversationId,
+        behavioralMemory
+      );
+
+      if (success) {
+        return res.json({
+          success: true,
+          data: {
+            conversationId,
+            behavioralMemory,
+            wordCount,
+            message: "Behavioral memory updated successfully",
+          },
+        });
+      } else {
+        return res.status(500).json({
+          success: false,
+          error: {
+            message: "Failed to update behavioral memory",
+            statusCode: 500,
+          },
+        });
+      }
+    } catch (error) {
+      console.error("Error updating behavioral memory:", error);
+      return res.status(500).json({
+        success: false,
+        error: {
+          message: "Failed to update behavioral memory",
+          statusCode: 500,
+        },
+      });
+    }
   })
 );
 

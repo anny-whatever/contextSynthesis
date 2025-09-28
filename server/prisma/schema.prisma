@@ -23,6 +23,7 @@ model Conversation {
   id                String                @id @default(cuid())
   title             String?
   userId            String?
+  behavioralMemory  String?               // Stores 250-300 words of conversation-specific behavioral memory
   totalInputTokens  Int                   @default(0)
   totalOutputTokens Int                   @default(0)
   totalCost         Float                 @default(0.0)

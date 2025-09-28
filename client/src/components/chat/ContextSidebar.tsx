@@ -5,8 +5,16 @@ import { ScrollArea } from "../ui/scroll-area";
 import { Badge } from "../ui/badge";
 import { Skeleton } from "../ui/skeleton";
 import { Alert, AlertDescription } from "../ui/alert";
-import { AlertCircle, Brain, FileText, Clock, Target } from "lucide-react";
+import {
+  AlertCircle,
+  Brain,
+  FileText,
+  Clock,
+  Target,
+  User,
+} from "lucide-react";
 import { ChatApiService } from "../../services/chatApi";
+import { BehavioralMemory } from "./BehavioralMemory";
 import type { Summary, IntentAnalysis } from "../../types/chat";
 
 interface ContextSidebarProps {
@@ -17,12 +25,12 @@ interface ContextSidebarProps {
   pingError?: string | null;
 }
 
-export function ContextSidebar({ 
-  conversationId, 
-  realtimeIntentAnalysis, 
-  realtimeSummaries = [], 
-  isPingingActive = false, 
-  pingError 
+export function ContextSidebar({
+  conversationId,
+  realtimeIntentAnalysis,
+  realtimeSummaries = [],
+  isPingingActive = false,
+  pingError,
 }: ContextSidebarProps) {
   const [summaries, setSummaries] = useState<Summary[]>([]);
   const [intentAnalyses, setIntentAnalyses] = useState<IntentAnalysis[]>([]);
@@ -31,9 +39,13 @@ export function ContextSidebar({
   const [error, setError] = useState<string | null>(null);
 
   // Merge real-time data with existing data
-  const displaySummaries = realtimeSummaries.length > 0 ? realtimeSummaries : summaries;
-  const displayIntentAnalyses = realtimeIntentAnalysis 
-    ? [realtimeIntentAnalysis, ...intentAnalyses.filter(ia => ia.id !== realtimeIntentAnalysis.id)]
+  const displaySummaries =
+    realtimeSummaries.length > 0 ? realtimeSummaries : summaries;
+  const displayIntentAnalyses = realtimeIntentAnalysis
+    ? [
+        realtimeIntentAnalysis,
+        ...intentAnalyses.filter((ia) => ia.id !== realtimeIntentAnalysis.id),
+      ]
     : intentAnalyses;
 
   useEffect(() => {
@@ -142,17 +154,36 @@ export function ContextSidebar({
           </div>
         )}
 
-        <Tabs defaultValue="intent" className="h-full">
-          <TabsList className="grid grid-cols-2 mx-2">
-            <TabsTrigger value="intent" className="flex gap-2 items-center">
-              <Target className="w-4 h-4" />
-              Intent Analysis
+        <Tabs defaultValue="memory" className="h-full">
+          <TabsList className="grid grid-cols-3 mx-2">
+            <TabsTrigger
+              value="memory"
+              className="flex gap-1 items-center text-xs"
+            >
+              <User className="w-3 h-3" />
+              Memory
             </TabsTrigger>
-            <TabsTrigger value="summaries" className="flex gap-2 items-center">
-              <FileText className="w-4 h-4" />
+            <TabsTrigger
+              value="intent"
+              className="flex gap-1 items-center text-xs"
+            >
+              <Target className="w-3 h-3" />
+              Intent
+            </TabsTrigger>
+            <TabsTrigger
+              value="summaries"
+              className="flex gap-1 items-center text-xs"
+            >
+              <FileText className="w-3 h-3" />
               Summaries
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="memory" className="mt-0">
+            <ScrollArea className="h-[calc(100vh-200px)]">
+              <BehavioralMemory conversationId={conversationId} />
+            </ScrollArea>
+          </TabsContent>
 
           <TabsContent value="intent" className="mt-0">
             <ScrollArea className="h-[calc(100vh-200px)]">
@@ -194,21 +225,24 @@ export function ContextSidebar({
                             </div>
 
                             {/* Key Topics */}
-                            {(result.keyTopics || analysis.keyTopics)?.length > 0 && (
+                            {(result.keyTopics || analysis.keyTopics)?.length >
+                              0 && (
                               <div>
                                 <h4 className="text-xs font-medium text-muted-foreground mb-1">
                                   Topics
                                 </h4>
                                 <div className="flex flex-wrap gap-1">
-                                  {(result.keyTopics || analysis.keyTopics).map((topic: string, index: number) => (
-                                    <Badge
-                                      key={index}
-                                      variant="secondary"
-                                      className="text-xs px-2 py-0.5 h-auto"
-                                    >
-                                      {topic}
-                                    </Badge>
-                                  ))}
+                                  {(result.keyTopics || analysis.keyTopics).map(
+                                    (topic: string, index: number) => (
+                                      <Badge
+                                        key={index}
+                                        variant="secondary"
+                                        className="text-xs px-2 py-0.5 h-auto"
+                                      >
+                                        {topic}
+                                      </Badge>
+                                    )
+                                  )}
                                 </div>
                               </div>
                             )}
@@ -218,22 +252,25 @@ export function ContextSidebar({
                               <h4 className="text-xs font-medium text-muted-foreground">
                                 Relevance
                               </h4>
-                              <Badge 
-                                variant="outline" 
+                              <Badge
+                                variant="outline"
                                 className={`text-xs px-2 py-0.5 h-auto ${
-                                  result.contextualRelevance === 'high' 
-                                    ? 'bg-green-50 text-green-700 border-green-200' 
-                                    : result.contextualRelevance === 'medium'
-                                    ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                                    : result.contextualRelevance === 'low'
-                                    ? 'bg-red-50 text-red-700 border-red-200'
-                                    : ''
+                                  result.contextualRelevance === "high"
+                                    ? "bg-green-50 text-green-700 border-green-200"
+                                    : result.contextualRelevance === "medium"
+                                    ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+                                    : result.contextualRelevance === "low"
+                                    ? "bg-red-50 text-red-700 border-red-200"
+                                    : ""
                                 }`}
                               >
-                                {result.contextualRelevance || 
-                                 (typeof analysis.contextualRelevance === 'number' 
-                                   ? `${(analysis.contextualRelevance * 100).toFixed(0)}%`
-                                   : 'N/A')}
+                                {result.contextualRelevance ||
+                                  (typeof analysis.contextualRelevance ===
+                                  "number"
+                                    ? `${(
+                                        analysis.contextualRelevance * 100
+                                      ).toFixed(0)}%`
+                                    : "N/A")}
                               </Badge>
                             </div>
 
@@ -243,24 +280,33 @@ export function ContextSidebar({
                                 <h4 className="text-xs font-medium text-muted-foreground">
                                   Relationship
                                 </h4>
-                                <Badge variant="outline" className="text-xs px-2 py-0.5 h-auto">
+                                <Badge
+                                  variant="outline"
+                                  className="text-xs px-2 py-0.5 h-auto"
+                                >
                                   {result.relationshipToHistory}
                                 </Badge>
                               </div>
                             )}
 
                             {/* Pending Questions */}
-                            {(result.pendingQuestions || analysis.pendingQuestions)?.length > 0 && (
+                            {(
+                              result.pendingQuestions ||
+                              analysis.pendingQuestions
+                            )?.length > 0 && (
                               <div>
                                 <h4 className="text-xs font-medium text-muted-foreground mb-1">
                                   Pending Questions
                                 </h4>
                                 <ul className="space-y-0.5 text-xs text-muted-foreground">
-                                  {(result.pendingQuestions || analysis.pendingQuestions).map(
-                                    (question: string, index: number) => (
-                                      <li key={index} className="leading-tight">• {question}</li>
-                                    )
-                                  )}
+                                  {(
+                                    result.pendingQuestions ||
+                                    analysis.pendingQuestions
+                                  ).map((question: string, index: number) => (
+                                    <li key={index} className="leading-tight">
+                                      • {question}
+                                    </li>
+                                  ))}
                                 </ul>
                               </div>
                             )}
@@ -335,12 +381,19 @@ export function ContextSidebar({
                           <div className="flex justify-between items-start gap-2">
                             <Badge
                               variant="outline"
-                              className={`text-xs px-2 py-0.5 h-auto ${getSummaryLevelColor(summary.summaryLevel)}`}
+                              className={`text-xs px-2 py-0.5 h-auto ${getSummaryLevelColor(
+                                summary.summaryLevel
+                              )}`}
                             >
                               Level {summary.summaryLevel}
-                              {summary.summaryLevel === 1 ? " (Original)" : " (Meta)"}
+                              {summary.summaryLevel === 1
+                                ? " (Original)"
+                                : " (Meta)"}
                             </Badge>
-                            <Badge variant="secondary" className="text-xs px-2 py-0.5 h-auto">
+                            <Badge
+                              variant="secondary"
+                              className="text-xs px-2 py-0.5 h-auto"
+                            >
                               {summary.messageRange.messageCount} messages
                             </Badge>
                           </div>
@@ -373,34 +426,38 @@ export function ContextSidebar({
                                     variant="outline"
                                     className={`text-xs px-2 py-0.5 h-auto ${
                                       summary.topicRelevance >= 0.8
-                                        ? 'bg-green-50 text-green-700 border-green-200'
+                                        ? "bg-green-50 text-green-700 border-green-200"
                                         : summary.topicRelevance >= 0.6
-                                        ? 'bg-yellow-50 text-yellow-700 border-yellow-200'
-                                        : 'bg-red-50 text-red-700 border-red-200'
+                                        ? "bg-yellow-50 text-yellow-700 border-yellow-200"
+                                        : "bg-red-50 text-red-700 border-red-200"
                                     }`}
                                   >
-                                    {(summary.topicRelevance * 100).toFixed(0)}% relevant
+                                    {(summary.topicRelevance * 100).toFixed(0)}%
+                                    relevant
                                   </Badge>
                                 )}
                               </div>
-                              {summary.relatedTopics && summary.relatedTopics.length > 0 && (
-                                <div>
-                                  <h5 className="text-xs font-medium text-muted-foreground mb-1">
-                                    Related Topics
-                                  </h5>
-                                  <div className="flex flex-wrap gap-1">
-                                    {summary.relatedTopics.map((topic: string, index: number) => (
-                                      <Badge
-                                        key={index}
-                                        variant="secondary"
-                                        className="text-xs px-2 py-0.5 h-auto"
-                                      >
-                                        {topic}
-                                      </Badge>
-                                    ))}
+                              {summary.relatedTopics &&
+                                summary.relatedTopics.length > 0 && (
+                                  <div>
+                                    <h5 className="text-xs font-medium text-muted-foreground mb-1">
+                                      Related Topics
+                                    </h5>
+                                    <div className="flex flex-wrap gap-1">
+                                      {summary.relatedTopics.map(
+                                        (topic: string, index: number) => (
+                                          <Badge
+                                            key={index}
+                                            variant="secondary"
+                                            className="text-xs px-2 py-0.5 h-auto"
+                                          >
+                                            {topic}
+                                          </Badge>
+                                        )
+                                      )}
+                                    </div>
                                   </div>
-                                </div>
-                              )}
+                                )}
                             </div>
                           )}
 
@@ -408,7 +465,9 @@ export function ContextSidebar({
                           <div className="flex items-center justify-between text-xs text-muted-foreground">
                             <div className="flex items-center gap-1">
                               <Target className="w-3 h-3" />
-                              <span>Range: {summary.messageRange.messageCount} msgs</span>
+                              <span>
+                                Range: {summary.messageRange.messageCount} msgs
+                              </span>
                             </div>
                             <div className="flex items-center gap-1">
                               <Clock className="w-3 h-3" />

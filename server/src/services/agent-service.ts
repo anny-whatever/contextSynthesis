@@ -14,6 +14,7 @@ import { SmartContextService } from "./smart-context-service";
 import { UsageTrackingService } from "./usage-tracking-service";
 import { ToolContextService } from "./tool-context-service";
 import { SummarizationQueueService } from "./summarization-queue-service";
+import { BehavioralMemoryService } from "./behavioral-memory-service";
 import {
   AgentConfig,
   AgentRequest,
@@ -33,6 +34,7 @@ export class AgentService {
   private usageTrackingService: UsageTrackingService;
   private toolContextService: ToolContextService;
   private summarizationQueueService: SummarizationQueueService;
+  private behavioralMemoryService: BehavioralMemoryService;
   private config: AgentConfig;
 
   constructor(
@@ -88,6 +90,10 @@ export class AgentService {
 
     this.toolContextService = new ToolContextService();
     this.summarizationQueueService = SummarizationQueueService.getInstance();
+    this.behavioralMemoryService = new BehavioralMemoryService(
+      this.openai,
+      this.prisma
+    );
 
     this.config = {
       model: process.env.DEFAULT_AGENT_MODEL || "gpt-4o-mini",
@@ -260,6 +266,18 @@ You are a conversational AI assistant with excellent memory and natural communic
         contextRetrievalStrategy: intentAnalysis.contextRetrievalStrategy,
       });
 
+      // Update behavioral memory based on user prompt
+      console.log(
+        "🧠 [BEHAVIORAL MEMORY] Updating behavioral memory for conversation"
+      );
+      const currentBehavioralMemory =
+        await this.behavioralMemoryService.getBehavioralMemory(conversationId);
+      await this.behavioralMemoryService.updateBehavioralMemory(
+        conversationId,
+        request.message,
+        currentBehavioralMemory || undefined
+      );
+
       // Now load smart context based on intent analysis
       const smartContextResult = await this.loadSmartConversationContext(
         conversationId,
@@ -272,7 +290,7 @@ You are a conversational AI assistant with excellent memory and natural communic
       const updatedIntentAnalysis = smartContextResult.updatedIntentAnalysis;
 
       // Prepare messages for OpenAI with intent analysis context
-      const messages = this.prepareMessagesForOpenAI(
+      const messages = await this.prepareMessagesForOpenAI(
         context,
         updatedIntentAnalysis
       );
@@ -1511,14 +1529,33 @@ ${JSON.stringify(context.data, null, 2)}`;
     return results;
   }
 
-  private prepareMessagesForOpenAI(
+  private async prepareMessagesForOpenAI(
     context: ConversationContext,
     intentAnalysis?: IntentAnalysisResult
-  ): any[] {
+  ): Promise<any[]> {
+    // Get behavioral memory for this conversation
+    const behavioralMemory =
+      await this.behavioralMemoryService.getBehavioralMemory(
+        context.conversationId!
+      );
+
+    // Enhance system prompt with behavioral memory
+    let enhancedSystemPrompt = this.config.systemPrompt;
+    if (behavioralMemory && behavioralMemory.trim()) {
+      enhancedSystemPrompt = `${this.config.systemPrompt}
+
+## CONVERSATION-SPECIFIC BEHAVIORAL MEMORY
+The following behavioral preferences and communication style have been learned from this specific conversation. Adapt your responses accordingly:
+
+${behavioralMemory}
+
+---`;
+    }
+
     // Use the new structured system prompt approach
     const structuredPrompt =
       this.toolContextService.buildStructuredSystemPrompt(
-        this.config.systemPrompt,
+        enhancedSystemPrompt,
         context,
         intentAnalysis
       );
