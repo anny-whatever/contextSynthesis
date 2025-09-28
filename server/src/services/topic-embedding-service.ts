@@ -14,7 +14,25 @@ export class TopicEmbeddingService {
   }
 
   /**
-   * Generate embedding for a topic name
+   * Generate embedding for search queries (no usage tracking)
+   */
+  async generateQueryEmbedding(query: string): Promise<number[]> {
+    try {
+      const response = await this.openai.embeddings.create({
+        model: 'text-embedding-3-small',
+        input: query,
+        dimensions: 384
+      });
+
+      return response.data[0]?.embedding || [];
+    } catch (error) {
+      console.error('Error generating query embedding:', error);
+      throw new Error(`Failed to generate embedding for query: ${query}`);
+    }
+  }
+
+  /**
+   * Generate embedding for a topic name (with usage tracking)
    */
   async generateTopicEmbedding(
     topicName: string, 

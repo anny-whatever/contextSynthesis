@@ -79,8 +79,8 @@ export class SemanticTopicSearchTool extends BaseTool {
       const validatedInput = semanticTopicSearchSchema.parse(input);
       const { query, conversationId, limit, threshold, dateFilter, includeHours } = validatedInput;
 
-      // Generate embedding for the search query
-      const queryEmbedding = await this.embeddingService.generateTopicEmbedding(query, conversationId);
+      // Generate embedding for the search query (no usage tracking)
+      const queryEmbedding = await this.embeddingService.generateQueryEmbedding(query);
 
       if (queryEmbedding.length === 0) {
         return {
