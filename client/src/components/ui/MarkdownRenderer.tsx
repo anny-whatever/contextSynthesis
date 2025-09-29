@@ -17,12 +17,32 @@ const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
 }) => {
   // Preprocess content to convert LaTeX bracket notation to dollar sign notation
   const preprocessMath = (text: string): string => {
-    // Convert block math: \[ ... \] on its own line to $$ ... $$
-    // Use [\s\S]*? to capture multi-line expressions including newlines
-    text = text.replace(/^\s*\\\[\s*([\s\S]*?)\s*\\\]\s*$/gm, (_, expr) => `$$${expr}$$`);
+    // First, protect existing math expressions from being processed again
+    const mathExpressions: string[] = [];
+    let mathIndex = 0;
+    
+    // Protect existing $$ ... $$ expressions
+    text = text.replace(/\$\$([\s\S]*?)\$\$/g, (match) => {
+      mathExpressions.push(match);
+      return `__MATH_BLOCK_${mathIndex++}__`;
+    });
+    
+    // Protect existing $ ... $ expressions
+    text = text.replace(/\$([^$\n]+?)\$/g, (match) => {
+      mathExpressions.push(match);
+      return `__MATH_INLINE_${mathIndex++}__`;
+    });
 
-    // Convert inline math: \[ ... \] to $ ... $ (only single line, no newlines)
-    text = text.replace(/\\\[\s*([^\[\]\n]+?)\s*\\\]/g, (_, expr) => `$${expr}$`);
+    // Convert block math: \[ ... \] (including multiline) to $$ ... $$
+    text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, expr) => `$$${expr.trim()}$$`);
+
+    // Convert inline math: \( ... \) to $ ... $
+    text = text.replace(/\\\((.*?)\\\)/g, (_, expr) => `$${expr.trim()}$`);
+
+    // Restore protected math expressions
+    mathIndex = 0;
+    text = text.replace(/__MATH_BLOCK_(\d+)__/g, () => mathExpressions[mathIndex++]);
+    text = text.replace(/__MATH_INLINE_(\d+)__/g, () => mathExpressions[mathIndex++]);
 
     return text;
   };

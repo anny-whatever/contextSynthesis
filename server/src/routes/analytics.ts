@@ -782,28 +782,41 @@ router.get(
       },
     });
 
-    // Group by messageId and calculate cumulative cost
+    // First, group by messageId to get total cost per message
     const messageMap = new Map();
-    let cumulativeCost = 0;
-    let messageCount = 0;
 
     usageData.forEach((record) => {
       if (!messageMap.has(record.messageId)) {
-        messageCount++;
         messageMap.set(record.messageId, {
-          messageCount,
-          cumulativeCost: 0,
-          createdAt: record.createdAt.toISOString(),
+          messageId: record.messageId,
+          totalCost: 0,
+          createdAt: record.createdAt,
         });
       }
       
       const messageData = messageMap.get(record.messageId);
-      messageData.cumulativeCost += record.totalCost;
-      cumulativeCost += record.totalCost;
-      messageData.cumulativeCost = cumulativeCost;
+      messageData.totalCost += record.totalCost;
+      // Keep the earliest createdAt for this message
+      if (record.createdAt < messageData.createdAt) {
+        messageData.createdAt = record.createdAt;
+      }
     });
 
-    const cumulativeData = Array.from(messageMap.values());
+    // Convert to array and sort by creation time to get proper message order
+    const messagesArray = Array.from(messageMap.values()).sort((a, b) => 
+      a.createdAt.getTime() - b.createdAt.getTime()
+    );
+
+    // Calculate cumulative cost across messages in chronological order
+    let cumulativeCost = 0;
+    const cumulativeData = messagesArray.map((message, index) => {
+      cumulativeCost += message.totalCost;
+      return {
+        messageCount: index + 1,
+        cumulativeCost: cumulativeCost,
+        createdAt: message.createdAt.toISOString(),
+      };
+    });
 
     res.json({
       success: true,
