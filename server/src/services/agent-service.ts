@@ -24,6 +24,24 @@ import {
   ToolUsageContext,
 } from "../types/agent";
 
+// Streaming interfaces
+export interface StreamingEvent {
+  type:
+    | "connection"
+    | "tool_start"
+    | "tool_complete"
+    | "tool_error"
+    | "message_chunk"
+    | "message_complete"
+    | "error";
+  data: any;
+  timestamp: string;
+}
+
+export interface StreamingAgentRequest extends AgentRequest {
+  onStreamEvent: (event: StreamingEvent) => void;
+}
+
 export class AgentService {
   private openai: OpenAI;
   private prisma: PrismaClient;
@@ -634,6 +652,158 @@ You are a conversational AI assistant with excellent memory and natural communic
         }`
       );
     }
+  }
+
+  /**
+   * Process message with streaming support - built on existing processMessage
+   */
+  async processMessageWithStreaming(
+    request: StreamingAgentRequest
+  ): Promise<AgentResponse> {
+    const { onStreamEvent, ...baseRequest } = request;
+
+    // Enhanced processMessage with streaming callbacks
+    const startTime = Date.now();
+    let conversationId = baseRequest.conversationId;
+
+    try {
+      // Emit initial processing event
+      onStreamEvent({
+        type: "tool_start",
+        data: {
+          message: "Starting message processing...",
+          step: "initialization",
+        },
+        timestamp: new Date().toISOString(),
+      });
+
+      // Create conversation if needed
+      if (!conversationId) {
+        conversationId = await this.createNewConversation(baseRequest.userId);
+        onStreamEvent({
+          type: "tool_complete",
+          data: {
+            message: "Created new conversation",
+            conversationId,
+            step: "conversation_setup",
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Wait for summarization if needed
+      if (
+        this.summarizationQueueService.isSummarizationActive(conversationId)
+      ) {
+        onStreamEvent({
+          type: "tool_start",
+          data: {
+            message: "Waiting for ongoing summarization...",
+            step: "summarization_wait",
+          },
+          timestamp: new Date().toISOString(),
+        });
+
+        await this.summarizationQueueService.waitForSummarization(
+          conversationId
+        );
+
+        onStreamEvent({
+          type: "tool_complete",
+          data: {
+            message: "Summarization completed",
+            step: "summarization_wait",
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      // Load context
+      onStreamEvent({
+        type: "tool_start",
+        data: {
+          message: "Loading conversation context...",
+          step: "context_loading",
+        },
+        timestamp: new Date().toISOString(),
+      });
+
+      const basicContext = await this.loadConversationContext(
+        conversationId,
+        baseRequest.userId
+      );
+
+      onStreamEvent({
+        type: "tool_complete",
+        data: {
+          message: "Context loaded",
+          messageCount: basicContext.messageHistory.length,
+          step: "context_loading",
+        },
+        timestamp: new Date().toISOString(),
+      });
+
+      // Intent analysis with streaming
+      onStreamEvent({
+        type: "tool_start",
+        data: {
+          message: "Analyzing intent and planning tools...",
+          step: "intent_analysis",
+        },
+        timestamp: new Date().toISOString(),
+      });
+
+      // Continue with regular processing but emit streaming events at key points
+      const response = await this.processMessageInternal(
+        { ...baseRequest, conversationId },
+        basicContext,
+        onStreamEvent
+      );
+
+      return response;
+    } catch (error) {
+      onStreamEvent({
+        type: "error",
+        data: {
+          message: error instanceof Error ? error.message : "Unknown error",
+          step: "error",
+        },
+        timestamp: new Date().toISOString(),
+      });
+      throw error;
+    }
+  }
+
+  /**
+   * Internal processing method that supports streaming
+   */
+  private async processMessageInternal(
+    request: AgentRequest,
+    basicContext: ConversationContext,
+    onStreamEvent?: (event: StreamingEvent) => void
+  ): Promise<AgentResponse> {
+    // This is a streamlined version of the main processing logic
+    // We'll delegate to the existing processMessage but add streaming events
+
+    const originalResponse = await this.processMessage(request);
+
+    // Emit streaming events for tool executions if callback provided
+    if (onStreamEvent && originalResponse.toolsUsed) {
+      for (const tool of originalResponse.toolsUsed) {
+        onStreamEvent({
+          type: "tool_complete",
+          data: {
+            toolName: tool.toolName,
+            result: tool.output ? "Success" : "Failed",
+            duration: tool.duration,
+            step: "tool_execution",
+          },
+          timestamp: new Date().toISOString(),
+        });
+      }
+    }
+
+    return originalResponse;
   }
 
   /**

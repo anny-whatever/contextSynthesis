@@ -12,6 +12,74 @@ import { AgentService } from "../services/agent-service";
 import { BehavioralMemoryService } from "../services/behavioral-memory-service";
 import { encode } from "gpt-tokenizer";
 
+// Streaming interfaces
+export interface StreamingEvent {
+  type:
+    | "connection"
+    | "tool_start"
+    | "tool_complete"
+    | "tool_error"
+    | "message_chunk"
+    | "message_complete"
+    | "error";
+  data: any;
+  timestamp: string;
+}
+
+class SSEConnection {
+  private res: Response;
+  private isActive: boolean = true;
+
+  constructor(res: Response) {
+    this.res = res;
+    this.setupSSE();
+  }
+
+  private setupSSE() {
+    this.res.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "Access-Control-Allow-Origin": "*",
+      "Access-Control-Allow-Headers": "Cache-Control",
+    });
+
+    // Send initial connection event
+    this.sendEvent({
+      type: "connection",
+      data: { status: "connected" },
+      timestamp: new Date().toISOString(),
+    });
+
+    // Handle client disconnect
+    this.res.on("close", () => {
+      this.isActive = false;
+    });
+  }
+
+  sendEvent(event: StreamingEvent) {
+    if (!this.isActive) return;
+
+    this.res.write(`data: ${JSON.stringify(event)}\n\n`);
+  }
+
+  close() {
+    if (this.isActive) {
+      this.sendEvent({
+        type: "connection",
+        data: { status: "closed" },
+        timestamp: new Date().toISOString(),
+      });
+      this.res.end();
+      this.isActive = false;
+    }
+  }
+
+  isConnected(): boolean {
+    return this.isActive;
+  }
+}
+
 const router = Router();
 const prisma = new PrismaClient();
 const agentService = new AgentService();
@@ -53,6 +121,55 @@ router.post(
           statusCode: 500,
         },
       });
+    }
+  })
+);
+
+// POST /api/chat/stream - Send a message and get streaming AI response
+router.post(
+  "/stream",
+  validateChatRequest,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { message, conversationId, userId, context } = req.body;
+    const sseConnection = new SSEConnection(res);
+
+    try {
+      // Process message with streaming callback
+      const agentResponse = await agentService.processMessageWithStreaming({
+        message,
+        conversationId,
+        userId: userId || "anonymous",
+        context,
+        onStreamEvent: (event: StreamingEvent) => {
+          sseConnection.sendEvent(event);
+        },
+      });
+
+      // Send final completion event
+      sseConnection.sendEvent({
+        type: "message_complete",
+        data: {
+          message: agentResponse.message,
+          conversationId: agentResponse.conversationId,
+          timestamp: agentResponse.metadata.timestamp.toISOString(),
+          toolsUsed: agentResponse.toolsUsed,
+          context: agentResponse.context,
+          metadata: agentResponse.metadata,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("Streaming chat error:", error);
+      sseConnection.sendEvent({
+        type: "error",
+        data: {
+          message: "Failed to process chat message",
+          statusCode: 500,
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } finally {
+      sseConnection.close();
     }
   })
 );

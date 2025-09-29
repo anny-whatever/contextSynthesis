@@ -5,6 +5,8 @@ export interface ToolResult<T = any> {
   error?: string;
   metadata?: Record<string, any>;
   duration?: number;
+  retries?: number;
+  circuitBreakerState?: string;
 }
 
 // Tool execution context
@@ -24,6 +26,12 @@ export interface ToolConfig {
   enabled: boolean;
   timeout?: number;
   retries?: number;
+  maxRetries?: number;
+  retryDelay?: number;
+  failureThreshold?: number;
+  recoveryTimeout?: number;
+  successThreshold?: number;
+  fallbackEnabled?: boolean;
   rateLimit?: {
     maxRequests: number;
     windowMs: number;
@@ -33,25 +41,25 @@ export interface ToolConfig {
 // Tool parameter schema
 export interface ToolParameter {
   name: string;
-  type: 'string' | 'number' | 'boolean' | 'object' | 'array';
+  type: "string" | "number" | "boolean" | "object" | "array";
   description: string;
   required: boolean;
   default?: any;
   examples?: any[];
   items?: {
-    type: 'string' | 'number' | 'boolean' | 'object';
+    type: "string" | "number" | "boolean" | "object";
     description?: string;
   };
 }
 
 // Tool definition for OpenAI function calling
 export interface ToolDefinition {
-  type: 'function';
+  type: "function";
   function: {
     name: string;
     description: string;
     parameters: {
-      type: 'object';
+      type: "object";
       properties: Record<string, any>;
       required: string[];
     };
@@ -72,6 +80,8 @@ export interface ToolUsageMetrics {
 export interface ToolExecutionOptions {
   timeout?: number;
   retries?: number;
+  maxRetries?: number;
+  retryDelay?: number;
   context?: ToolContext;
   validateInput?: boolean;
   trackUsage?: boolean;
@@ -82,7 +92,7 @@ export interface ITool {
   readonly config: ToolConfig;
   readonly parameters: ToolParameter[];
   readonly definition: ToolDefinition;
-  
+
   execute(input: any, options?: ToolExecutionOptions): Promise<ToolResult>;
   validate(input: any): Promise<boolean>;
   getUsageMetrics(): Promise<ToolUsageMetrics>;
