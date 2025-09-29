@@ -1766,15 +1766,15 @@ ${behavioralMemory}
     try {
       // Reduced to 1 turn (2 messages) to force tool usage for better recall
       // This provides minimal immediate context to encourage using tools for historical context
-      let recentMessageLimit = 6; // Minimum: last 1 turn (reduced from 3 turns)
+      let recentMessageLimit = 12; // Minimum: last 1 turn (reduced from 3 turns)
 
       // Adjust based on context retrieval strategy
       switch (intentAnalysis.contextRetrievalStrategy) {
         case "none":
-          recentMessageLimit = 6; // Only last 1 turn for immediate context
+          recentMessageLimit = 12; // Only last 1 turn for immediate context
           break;
         case "recent_only":
-          recentMessageLimit = 6; // Last 1 turn
+          recentMessageLimit = 12; // Last 1 turn
           break;
         case "semantic_search":
         case "date_based_search":
