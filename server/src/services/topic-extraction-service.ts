@@ -8,7 +8,8 @@ export interface ExtractedTopic {
   relatedTopics: string[];
   keyMessages: string[];
   summary: string;
-  sourceContext?: 'user_prompt' | 'ai_response' | 'mixed';
+  broaderTopic?: string; // Conservative broader category (astronomy, anime, technology, etc.)
+  sourceContext?: "user_prompt" | "ai_response" | "mixed";
   pointIndex?: number;
   parentTopic?: string;
   structuredContent?: boolean;
@@ -85,6 +86,30 @@ For each topic, provide:
 - relatedTopics: Array of closely connected topic names
 - keyMessages: Array of the most important message excerpts for this topic (max 3)
 - summary: COMPREHENSIVE and DETAILED summary (5-10 sentences minimum) that captures ALL relevant dates, events, persons, personal details, numbers, statistics, and specific information discussed about this topic. Do NOT summarize briefly - include ALL important details, names, numbers, dates, and context.
+- broaderTopic: Conservative broader category using ONLY these approved categories - choose the most general applicable term:
+  * "astronomy" (space, stars, planets, cosmic phenomena, astrophysics)
+  * "science" (physics, chemistry, biology, research, scientific concepts)
+  * "technology" (programming, AI, computers, software, tech products)
+  * "entertainment" (movies, games, books, shows, general entertainment)
+  * "anime" (all Japanese animation discussions, manga, anime culture)
+  * "health" (fitness, nutrition, medical, wellness, mental health)
+  * "work" (career, projects, meetings, professional life, business)
+  * "personal" (family, relationships, life events, personal experiences)
+  * "finance" (money, investments, budgets, economics, crypto)
+  * "education" (learning, courses, academic topics, studying)
+  * "travel" (places, trips, geography, cultures, tourism)
+  * "food" (cooking, restaurants, recipes, nutrition, cuisine)
+  * "news" (current events, politics, world events, journalism)
+  * "general" (if truly doesn't fit elsewhere - use sparingly)
+  
+  CRITICAL BROADER TOPIC RULES:
+  - Always choose the BROADER umbrella term for edge cases
+  - "quantum physics in anime" → "science" (broader than anime)
+  - "cooking show" → "food" (broader than entertainment)
+  - "work stress health" → "health" (broader encompasses the concern)
+  - "space anime" → "science" (physics/astronomy is broader than anime)
+  - When multiple topics could apply, choose the most foundational/general one
+  
 - sourceContext: "user_prompt", "ai_response", or "mixed" based on where the topic originated
 - pointIndex: (optional) If this topic comes from a specific point in structured content, provide the index (0, 1, 2, etc.)
 - parentTopic: (optional) If this is a sub-topic, provide the parent topic name
@@ -175,8 +200,10 @@ Do NOT create brief summaries. Create comprehensive, detailed summaries that pre
             ? topic.keyMessages.slice(0, 3)
             : [],
           summary: topic.summary,
-          sourceContext: topic.sourceContext || 'mixed',
-          pointIndex: typeof topic.pointIndex === 'number' ? topic.pointIndex : undefined,
+          broaderTopic: topic.broaderTopic || "general", // Default to 'general' if not provided
+          sourceContext: topic.sourceContext || "mixed",
+          pointIndex:
+            typeof topic.pointIndex === "number" ? topic.pointIndex : undefined,
           parentTopic: topic.parentTopic || undefined,
           structuredContent: Boolean(topic.structuredContent),
         }));
@@ -220,6 +247,7 @@ Do NOT create brief summaries. Create comprehensive, detailed summaries that pre
             relatedTopics: [],
             keyMessages: [],
             summary: fallbackSummary,
+            broaderTopic: "general",
           },
         ],
         batchId,

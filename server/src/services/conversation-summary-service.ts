@@ -21,6 +21,7 @@ export interface TopicSummaryResult {
   summaryLevel: number;
   topicRelevance: number;
   batchId: string;
+  broaderTopic?: string; // Conservative broader category
   sourceContext?: string;
   pointIndex?: number;
   parentTopic?: string;
@@ -56,7 +57,12 @@ export class ConversationSummaryService {
     this.openai = openai;
     this.topicExtractionService = new TopicExtractionService(prisma);
     this.topicEmbeddingService =
-      topicEmbeddingService || new TopicEmbeddingService(openai, prisma, new UsageTrackingService(prisma));
+      topicEmbeddingService ||
+      new TopicEmbeddingService(
+        openai,
+        prisma,
+        new UsageTrackingService(prisma)
+      );
   }
 
   async checkAndCreateSummary(
@@ -287,7 +293,13 @@ export class ConversationSummaryService {
     }
 
     // Store all topic summaries in the database
-    await this.storeTopicSummaries(conversationId, topicSummaries, allMessages, userMessageId, userId);
+    await this.storeTopicSummaries(
+      conversationId,
+      topicSummaries,
+      allMessages,
+      userMessageId,
+      userId
+    );
 
     console.log(
       "📊 [SUMMARY-COMPLETE] Created",
@@ -357,6 +369,7 @@ export class ConversationSummaryService {
       summaryLevel: 1,
       topicRelevance: topic.relevanceScore,
       batchId,
+      broaderTopic: topic.broaderTopic || "general", // Include broader topic
     };
 
     // Add optional fields only if they exist
@@ -397,6 +410,7 @@ export class ConversationSummaryService {
           summaryLevel: summary.summaryLevel,
           topicRelevance: summary.topicRelevance,
           batchId: summary.batchId,
+          broaderTopic: summary.broaderTopic || "general", // Store broader topic
           structuredContent: summary.structuredContent || false,
         };
 
@@ -475,6 +489,7 @@ export class ConversationSummaryService {
       summaryLevel: summary.summaryLevel,
       topicRelevance: summary.topicRelevance,
       batchId: summary.batchId || "",
+      broaderTopic: summary.broaderTopic || "general",
     }));
   }
 

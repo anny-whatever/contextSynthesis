@@ -1,6 +1,6 @@
 export interface Message {
   id?: string;
-  role: 'USER' | 'ASSISTANT';
+  role: "USER" | "ASSISTANT";
   content: string;
   timestamp: Date;
   toolUsages?: ToolUsage[];
@@ -68,6 +68,7 @@ export interface Summary {
   summaryLevel: number;
   topicRelevance: number;
   batchId?: string;
+  broaderTopic?: string; // Conservative broader category
   createdAt: Date;
   updatedAt: Date;
 }

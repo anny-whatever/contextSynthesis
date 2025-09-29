@@ -91,6 +91,7 @@ model ConversationSummary {
   pointIndex       Int?                   // Index of the point in structured content
   parentTopic      String?                // Reference to parent topic for hierarchical relationships
   structuredContent Boolean               @default(false) // Whether this topic came from structured content
+  broaderTopic     String?                // Conservative broader category (astronomy, anime, technology, etc.)
   createdAt        DateTime               @default(now())
   updatedAt        DateTime               @updatedAt
   topicEmbedding   Unsupported("vector")?
@@ -101,6 +102,8 @@ model ConversationSummary {
   @@index([topicName])
   @@index([structuredContent])
   @@index([parentTopic])
+  @@index([broaderTopic])
+  @@index([broaderTopic, createdAt])
   @@map("conversation_summaries")
 }
 

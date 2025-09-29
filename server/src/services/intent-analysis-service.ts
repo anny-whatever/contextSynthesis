@@ -10,6 +10,7 @@ export interface ToolExecutionPlan {
   reasoning: string;
   parameters: {
     semanticSearchQueries?: string[];
+    broaderTopics?: string[];
     dateQuery?: string;
     includeHours?: boolean;
     maxContextItems?: number;
@@ -370,9 +371,37 @@ TOOL PRIORITY LEVELS:
 - "low": Tool provides supplementary information
 
 TOOL PARAMETER INTELLIGENCE:
-- For semantic_topic_search: Generate specific search queries based on topics mentioned
+- For semantic_topic_search: Generate specific search queries based on topics mentioned AND identify broader topic categories to filter by
 - For date_based_topic_search: Extract precise temporal references and set appropriate granularity
 - For web_search: Create focused search queries for current information needs
+
+BROADER TOPIC IDENTIFICATION FOR SMART FILTERING:
+When planning semantic_topic_search, ALWAYS identify the broader topic categories that the user's query relates to. Use these conservative categories:
+
+APPROVED BROADER TOPICS:
+- "astronomy" (space, stars, planets, cosmic phenomena, astrophysics)
+- "science" (physics, chemistry, biology, research, scientific concepts)  
+- "technology" (programming, AI, computers, software, tech products)
+- "entertainment" (movies, games, books, shows, general entertainment)
+- "anime" (all Japanese animation discussions, manga, anime culture)
+- "health" (fitness, nutrition, medical, wellness, mental health)
+- "work" (career, projects, meetings, professional life, business)
+- "personal" (family, relationships, life events, personal experiences)
+- "finance" (money, investments, budgets, economics, crypto)
+- "education" (learning, courses, academic topics, studying)
+- "travel" (places, trips, geography, cultures, tourism)
+- "food" (cooking, restaurants, recipes, nutrition, cuisine)
+- "news" (current events, politics, world events, journalism)
+- "general" (if truly doesn't fit elsewhere - use sparingly)
+
+BROADER TOPIC SELECTION RULES:
+- Always choose the BROADER umbrella term for edge cases
+- "quantum physics in anime" → ["science"] (broader than anime)
+- "cooking show" → ["food"] (broader than entertainment)
+- "space anime" → ["science"] (physics/astronomy is broader)
+- "Tell me about that space anime we discussed" → ["anime", "science"] (both relevant)
+- When multiple topics apply, include all relevant broader categories (max 3)
+- Prioritize meaning-based categorization over keyword matching
 
 RESPONSE FORMAT (JSON):
 {
@@ -392,6 +421,7 @@ RESPONSE FORMAT (JSON):
       "reasoning": "AI explanation for why this tool is needed and what it will provide",
       "parameters": {
         "semanticSearchQueries": ["query1", "query2"] (for semantic_topic_search),
+        "broaderTopics": ["science", "anime", "technology"] (REQUIRED for semantic_topic_search - broader topic categories to filter by),
         "dateQuery": "temporal reference" (for date_based_topic_search),
         "includeHours": true|false (for date_based_topic_search),
         "maxContextItems": 3-10 (for historical searches),

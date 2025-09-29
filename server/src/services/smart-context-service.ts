@@ -2,7 +2,10 @@ import { PrismaClient } from "@prisma/client";
 import { SemanticTopicSearchTool } from "../tools/semantic-topic-search-tool";
 import { DateBasedTopicSearchTool } from "../tools/date-based-topic-search-tool";
 import { WebSearchTool } from "../tools/web-search-tool";
-import { IntentAnalysisResult, ToolExecutionPlan } from "./intent-analysis-service";
+import {
+  IntentAnalysisResult,
+  ToolExecutionPlan,
+} from "./intent-analysis-service";
 
 export interface ToolExecutionResult {
   toolName: string;
@@ -127,8 +130,10 @@ export class SmartContextService {
     }
 
     // LEGACY: Fallback to old single-tool execution for backward compatibility
-    console.warn("🔄 [SMART CONTEXT] Using legacy single-tool execution - consider updating to multi-tool execution plan");
-    
+    console.warn(
+      "🔄 [SMART CONTEXT] Using legacy single-tool execution - consider updating to multi-tool execution plan"
+    );
+
     // If no historical context is needed, return empty
     if (!needsHistoricalContext || contextRetrievalStrategy === "none") {
       return {
@@ -147,12 +152,17 @@ export class SmartContextService {
           keyTopics
         );
 
-      case "semantic_search":
+      case "semantic_search": {
+        // Extract broader topics from tool execution plan
+        const broaderTopics =
+          this.extractBroaderTopicsFromIntentAnalysis(intentAnalysis);
         return await this.getSemanticContext(
           conversationId,
           semanticSearchQueries || [],
-          maxContextItems || 5
+          maxContextItems || 5,
+          broaderTopics
         );
+      }
 
       case "date_based_search":
         return await this.getDateBasedContext(
@@ -233,7 +243,7 @@ export class SmartContextService {
     // Calculate confidence for recent context
     const hasTopicFilter = keyTopics && keyTopics.length > 0;
     const resultRatio = summaries.length / limit;
-    
+
     // For recent context, confidence is based on availability and topic matching
     let searchResultQuality = 0.6; // Base confidence for recent context
     if (hasTopicFilter) {
@@ -241,7 +251,7 @@ export class SmartContextService {
       searchResultQuality = summaries.length > 0 ? 0.8 : 0.3;
     } else {
       // For pure recent context, confidence depends on how much we retrieved
-      searchResultQuality = 0.4 + (resultRatio * 0.4); // 0.4 to 0.8 range
+      searchResultQuality = 0.4 + resultRatio * 0.4; // 0.4 to 0.8 range
     }
 
     return {
@@ -262,7 +272,8 @@ export class SmartContextService {
   private async getSemanticContext(
     conversationId: string,
     searchQueries: string[],
-    limit: number
+    limit: number,
+    broaderTopics?: string[]
   ): Promise<SmartContextResult> {
     if (searchQueries.length === 0) {
       return await this.getRecentContext(conversationId, limit);
@@ -281,6 +292,7 @@ export class SmartContextService {
           conversationId,
           limit: Math.ceil(limit / searchQueries.length),
           threshold: 0.7, // Higher threshold for exact matches
+          broaderTopics: broaderTopics, // Filter by broader topics if provided
         });
 
         // If no exact matches found, try with lower threshold for related topics
@@ -294,6 +306,7 @@ export class SmartContextService {
             conversationId,
             limit: Math.ceil(limit / searchQueries.length),
             threshold: 0.3, // Lower threshold for related topics
+            broaderTopics: broaderTopics, // Filter by broader topics if provided
           });
         } else {
           hasExactMatches = true;
@@ -342,11 +355,17 @@ export class SmartContextService {
     const totalCount = await this.getTotalSummariesCount(conversationId);
 
     // Calculate confidence metrics
-    const similarities = summaries.map(s => s.topicRelevance).filter(s => s !== undefined);
-    const averageSimilarity = similarities.length > 0 ? similarities.reduce((a, b) => a + b, 0) / similarities.length : 0;
-    const hasStrongMatches = similarities.some(s => s >= 0.7);
-    const queryMatchRate = summaries.length > 0 ? summaries.length / searchQueries.length : 0;
-    
+    const similarities = summaries
+      .map((s) => s.topicRelevance)
+      .filter((s) => s !== undefined);
+    const averageSimilarity =
+      similarities.length > 0
+        ? similarities.reduce((a, b) => a + b, 0) / similarities.length
+        : 0;
+    const hasStrongMatches = similarities.some((s) => s >= 0.7);
+    const queryMatchRate =
+      summaries.length > 0 ? summaries.length / searchQueries.length : 0;
+
     // Calculate overall search result quality (0-1 scale)
     let searchResultQuality = 0;
     if (summaries.length > 0) {
@@ -354,8 +373,12 @@ export class SmartContextService {
       const countScore = Math.min(summaries.length / limit, 1); // How many results we got vs requested
       const matchScore = hasStrongMatches ? 1 : 0.5; // Bonus for strong matches
       const queryScore = Math.min(queryMatchRate, 1); // How well we matched queries
-      
-      searchResultQuality = (similarityScore * 0.4 + countScore * 0.2 + matchScore * 0.3 + queryScore * 0.1);
+
+      searchResultQuality =
+        similarityScore * 0.4 +
+        countScore * 0.2 +
+        matchScore * 0.3 +
+        queryScore * 0.1;
     }
 
     return {
@@ -525,29 +548,43 @@ export class SmartContextService {
     const toolResults: ToolExecutionResult[] = [];
     const fallbacksUsed: string[] = [];
 
-    console.log(`🚀 [MULTI-TOOL] Executing ${executionStrategy} strategy with ${toolExecutionPlan.length} tools for query type: ${queryType}`);
+    console.log(
+      `🚀 [MULTI-TOOL] Executing ${executionStrategy} strategy with ${toolExecutionPlan.length} tools for query type: ${queryType}`
+    );
 
     try {
       switch (executionStrategy) {
         case "single":
           if (toolExecutionPlan[0]) {
-            const singleResult = await this.executeSingleTool(conversationId, toolExecutionPlan[0]);
+            const singleResult = await this.executeSingleTool(
+              conversationId,
+              toolExecutionPlan[0]
+            );
             toolResults.push(singleResult);
           }
           break;
 
         case "parallel":
-          const parallelResults = await this.executeToolsInParallel(conversationId, toolExecutionPlan);
+          const parallelResults = await this.executeToolsInParallel(
+            conversationId,
+            toolExecutionPlan
+          );
           toolResults.push(...parallelResults);
           break;
 
         case "sequential":
-          const sequentialResults = await this.executeToolsSequentially(conversationId, toolExecutionPlan);
+          const sequentialResults = await this.executeToolsSequentially(
+            conversationId,
+            toolExecutionPlan
+          );
           toolResults.push(...sequentialResults);
           break;
 
         case "conditional":
-          const conditionalResults = await this.executeToolsConditionally(conversationId, toolExecutionPlan);
+          const conditionalResults = await this.executeToolsConditionally(
+            conversationId,
+            toolExecutionPlan
+          );
           toolResults.push(...conditionalResults);
           break;
 
@@ -557,30 +594,42 @@ export class SmartContextService {
 
       // Handle fallbacks for failed critical tools
       const failedCriticalTools = toolResults.filter(
-        result => !result.success && result.priority === "critical"
+        (result) => !result.success && result.priority === "critical"
       );
 
       for (const failedTool of failedCriticalTools) {
-        const originalPlan = toolExecutionPlan.find(plan => plan.toolName === failedTool.toolName);
-        if (originalPlan?.fallbackTools && originalPlan.fallbackTools.length > 0) {
-          console.log(`🔄 [FALLBACK] Executing fallback for failed critical tool: ${failedTool.toolName}`);
-          
+        const originalPlan = toolExecutionPlan.find(
+          (plan) => plan.toolName === failedTool.toolName
+        );
+        if (
+          originalPlan?.fallbackTools &&
+          originalPlan.fallbackTools.length > 0
+        ) {
+          console.log(
+            `🔄 [FALLBACK] Executing fallback for failed critical tool: ${failedTool.toolName}`
+          );
+
           for (const fallbackToolName of originalPlan.fallbackTools) {
             const fallbackPlan: ToolExecutionPlan = {
-               toolName: fallbackToolName,
-               priority: "high", // Fallbacks are high priority
-               required: true,
-               reasoning: `Fallback for failed critical tool: ${failedTool.toolName}`,
-               parameters: originalPlan.parameters,
-               timeout: originalPlan.timeout || 30000,
-               retryCount: 1
-             };
+              toolName: fallbackToolName,
+              priority: "high", // Fallbacks are high priority
+              required: true,
+              reasoning: `Fallback for failed critical tool: ${failedTool.toolName}`,
+              parameters: originalPlan.parameters,
+              timeout: originalPlan.timeout || 30000,
+              retryCount: 1,
+            };
 
-            const fallbackResult = await this.executeSingleTool(conversationId, fallbackPlan);
+            const fallbackResult = await this.executeSingleTool(
+              conversationId,
+              fallbackPlan
+            );
             if (fallbackResult.success) {
               toolResults.push(fallbackResult);
               fallbacksUsed.push(fallbackToolName);
-              console.log(`✅ [FALLBACK] Successfully executed fallback: ${fallbackToolName}`);
+              console.log(
+                `✅ [FALLBACK] Successfully executed fallback: ${fallbackToolName}`
+              );
               break; // Stop after first successful fallback
             }
           }
@@ -596,11 +645,11 @@ export class SmartContextService {
       );
 
       const totalExecutionTime = Date.now() - startTime;
-      const successfulTools = toolResults.filter(r => r.success).length;
-      const failedTools = toolResults.filter(r => !r.success).length;
+      const successfulTools = toolResults.filter((r) => r.success).length;
+      const failedTools = toolResults.filter((r) => !r.success).length;
       const criticalToolsSucceeded = toolResults
-        .filter(r => r.priority === "critical")
-        .every(r => r.success);
+        .filter((r) => r.priority === "critical")
+        .every((r) => r.success);
 
       const multiToolExecution: MultiToolExecutionResult = {
         executionStrategy,
@@ -613,15 +662,15 @@ export class SmartContextService {
           failedTools,
           totalExecutionTime,
           criticalToolsSucceeded,
-          fallbacksUsed
-        }
+          fallbacksUsed,
+        },
       };
 
       // Add multi-tool execution metadata to the result (without circular reference)
       synthesizedResult.metadata = {
         ...synthesizedResult.metadata,
         multiToolExecution,
-        executionPlan: toolExecutionPlan
+        executionPlan: toolExecutionPlan,
       };
 
       console.log(`🎯 [MULTI-TOOL] Execution completed:`, {
@@ -632,14 +681,13 @@ export class SmartContextService {
         failed: failedTools,
         executionTime: totalExecutionTime,
         criticalSuccess: criticalToolsSucceeded,
-        fallbacksUsed: fallbacksUsed.length
+        fallbacksUsed: fallbacksUsed.length,
       });
 
       return synthesizedResult;
-
     } catch (error) {
       console.error("❌ [MULTI-TOOL] Execution failed:", error);
-      
+
       // Return fallback result
       return {
         summaries: [],
@@ -658,12 +706,14 @@ export class SmartContextService {
               failedTools: toolExecutionPlan.length,
               totalExecutionTime: Date.now() - startTime,
               criticalToolsSucceeded: false,
-              fallbacksUsed
-            }
+              fallbacksUsed,
+            },
           },
           executionPlan: toolExecutionPlan,
-          warning: `Multi-tool execution failed: ${error instanceof Error ? error.message : 'Unknown error'}`
-        }
+          warning: `Multi-tool execution failed: ${
+            error instanceof Error ? error.message : "Unknown error"
+          }`,
+        },
       };
     }
   }
@@ -673,12 +723,14 @@ export class SmartContextService {
     toolPlan: ToolExecutionPlan
   ): Promise<ToolExecutionResult> {
     const startTime = Date.now();
-    
+
     try {
-      console.log(`🔧 [TOOL] Executing ${toolPlan.toolName} with priority ${toolPlan.priority}`);
-      
+      console.log(
+        `🔧 [TOOL] Executing ${toolPlan.toolName} with priority ${toolPlan.priority}`
+      );
+
       let result: any;
-      
+
       switch (toolPlan.toolName) {
         case "semantic_topic_search":
           result = await this.getSemanticContext(
@@ -698,35 +750,39 @@ export class SmartContextService {
           break;
 
         case "web_search":
-          console.log(`🌐 [WEB SEARCH] Executing web search with query: ${toolPlan.parameters.webSearchQuery}`);
+          console.log(
+            `🌐 [WEB SEARCH] Executing web search with query: ${toolPlan.parameters.webSearchQuery}`
+          );
           const webSearchResult = await this.webSearchTool.execute({
             query: toolPlan.parameters.webSearchQuery,
             max_results: 10, // Default to 10 results
             include_domains: toolPlan.parameters.searchDomains,
-            exclude_domains: undefined // Not defined in ToolExecutionPlan interface
+            exclude_domains: undefined, // Not defined in ToolExecutionPlan interface
           });
 
           if (webSearchResult.success && webSearchResult.data) {
             // Format web search results to match SmartContextResult interface
             result = {
-              summaries: webSearchResult.data.results.map((webResult: any, index: number) => ({
-                summaryText: `${webResult.title}\n\n${webResult.snippet}`,
-                topicName: `Web Search Result ${index + 1}`,
-                relatedTopics: [toolPlan.parameters.webSearchQuery],
-                messageRange: { start: 0, end: 0 },
-                summaryLevel: 1,
-                topicRelevance: 0.9, // High relevance for web search results
-                createdAt: new Date().toISOString(),
-                isExactMatch: true,
-                source: "web_search",
-                toolPriority: toolPlan.priority,
-                webSearchMetadata: {
-                  url: webResult.url,
-                  title: webResult.title,
-                  publishedDate: webResult.published_date,
-                  sourceWebsite: webResult.source
-                }
-              })),
+              summaries: webSearchResult.data.results.map(
+                (webResult: any, index: number) => ({
+                  summaryText: `${webResult.title}\n\n${webResult.snippet}`,
+                  topicName: `Web Search Result ${index + 1}`,
+                  relatedTopics: [toolPlan.parameters.webSearchQuery],
+                  messageRange: { start: 0, end: 0 },
+                  summaryLevel: 1,
+                  topicRelevance: 0.9, // High relevance for web search results
+                  createdAt: new Date().toISOString(),
+                  isExactMatch: true,
+                  source: "web_search",
+                  toolPriority: toolPlan.priority,
+                  webSearchMetadata: {
+                    url: webResult.url,
+                    title: webResult.title,
+                    publishedDate: webResult.published_date,
+                    sourceWebsite: webResult.source,
+                  },
+                })
+              ),
               retrievalMethod: "web_search",
               totalAvailable: webSearchResult.data.total_results,
               retrieved: webSearchResult.data.results.length,
@@ -735,7 +791,7 @@ export class SmartContextService {
                 averageSimilarity: 0.9,
                 hasStrongMatches: true,
                 resultCount: webSearchResult.data.results.length,
-                queryMatchRate: 1.0
+                queryMatchRate: 1.0,
               },
               metadata: {
                 webSearchQuery: toolPlan.parameters.webSearchQuery,
@@ -743,8 +799,8 @@ export class SmartContextService {
                 totalResults: webSearchResult.data.total_results,
                 webSearchCost: webSearchResult.metadata?.webSearchCost,
                 webSearchCalls: webSearchResult.metadata?.webSearchCalls,
-                model: webSearchResult.metadata?.model
-              }
+                model: webSearchResult.metadata?.model,
+              },
             };
           } else {
             // Handle web search failure
@@ -755,8 +811,8 @@ export class SmartContextService {
               retrieved: 0,
               metadata: {
                 error: webSearchResult.error || "Web search failed",
-                webSearchQuery: toolPlan.parameters.webSearchQuery
-              }
+                webSearchQuery: toolPlan.parameters.webSearchQuery,
+              },
             };
           }
           break;
@@ -766,7 +822,7 @@ export class SmartContextService {
       }
 
       const executionTime = Date.now() - startTime;
-      
+
       return {
         toolName: toolPlan.toolName,
         success: true,
@@ -783,21 +839,20 @@ export class SmartContextService {
           includeHours: result.metadata?.includeHours,
           totalFound: result.metadata?.totalFound,
           warning: result.metadata?.warning,
-          parsedTime: result.metadata?.parsedTime
-        }
+          parsedTime: result.metadata?.parsedTime,
+        },
       };
-
     } catch (error) {
       const executionTime = Date.now() - startTime;
       console.error(`❌ [TOOL] Failed to execute ${toolPlan.toolName}:`, error);
-      
+
       return {
         toolName: toolPlan.toolName,
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : "Unknown error",
         executionTime,
         priority: toolPlan.priority,
-        reasoning: toolPlan.reasoning
+        reasoning: toolPlan.reasoning,
       };
     }
   }
@@ -806,23 +861,30 @@ export class SmartContextService {
     conversationId: string,
     toolPlans: ToolExecutionPlan[]
   ): Promise<ToolExecutionResult[]> {
-    console.log(`⚡ [PARALLEL] Executing ${toolPlans.length} tools in parallel`);
-    
-    const promises = toolPlans.map(plan => this.executeSingleTool(conversationId, plan));
+    console.log(
+      `⚡ [PARALLEL] Executing ${toolPlans.length} tools in parallel`
+    );
+
+    const promises = toolPlans.map((plan) =>
+      this.executeSingleTool(conversationId, plan)
+    );
     const results = await Promise.allSettled(promises);
-    
+
     return results.map((result, index) => {
-      if (result.status === 'fulfilled') {
+      if (result.status === "fulfilled") {
         return result.value;
       } else {
         const plan = toolPlans[index];
         return {
-          toolName: plan?.toolName || 'unknown',
+          toolName: plan?.toolName || "unknown",
           success: false,
-          error: result.reason instanceof Error ? result.reason.message : 'Promise rejected',
+          error:
+            result.reason instanceof Error
+              ? result.reason.message
+              : "Promise rejected",
           executionTime: 0,
-          priority: plan?.priority || 'low',
-          reasoning: plan?.reasoning || 'Unknown reasoning'
+          priority: plan?.priority || "low",
+          reasoning: plan?.reasoning || "Unknown reasoning",
         };
       }
     });
@@ -832,21 +894,25 @@ export class SmartContextService {
     conversationId: string,
     toolPlans: ToolExecutionPlan[]
   ): Promise<ToolExecutionResult[]> {
-    console.log(`🔄 [SEQUENTIAL] Executing ${toolPlans.length} tools sequentially`);
-    
+    console.log(
+      `🔄 [SEQUENTIAL] Executing ${toolPlans.length} tools sequentially`
+    );
+
     const results: ToolExecutionResult[] = [];
-    
+
     for (const plan of toolPlans) {
       const result = await this.executeSingleTool(conversationId, plan);
       results.push(result);
-      
+
       // If a critical tool fails, stop execution
       if (!result.success && plan.priority === "critical") {
-        console.warn(`⚠️ [SEQUENTIAL] Critical tool ${plan.toolName} failed, stopping execution`);
+        console.warn(
+          `⚠️ [SEQUENTIAL] Critical tool ${plan.toolName} failed, stopping execution`
+        );
         break;
       }
     }
-    
+
     return results;
   }
 
@@ -854,33 +920,40 @@ export class SmartContextService {
     conversationId: string,
     toolPlans: ToolExecutionPlan[]
   ): Promise<ToolExecutionResult[]> {
-    console.log(`🤔 [CONDITIONAL] Executing ${toolPlans.length} tools conditionally`);
-    
+    console.log(
+      `🤔 [CONDITIONAL] Executing ${toolPlans.length} tools conditionally`
+    );
+
     const results: ToolExecutionResult[] = [];
-    
+
     for (const plan of toolPlans) {
       // Execute the tool
       const result = await this.executeSingleTool(conversationId, plan);
       results.push(result);
-      
-      // Conditional logic: if we get good results from a high-priority tool, 
-       // we might skip lower priority tools
-       if (result.success && plan.priority === "critical" && 
-           result.metadata?.resultCount && result.metadata.resultCount > 0) {
-        
+
+      // Conditional logic: if we get good results from a high-priority tool,
+      // we might skip lower priority tools
+      if (
+        result.success &&
+        plan.priority === "critical" &&
+        result.metadata?.resultCount &&
+        result.metadata.resultCount > 0
+      ) {
         // Check if remaining tools are lower priority
         const remainingTools = toolPlans.slice(results.length);
         const hasOnlyLowerPriorityTools = remainingTools.every(
-          t => t.priority === "low" || t.priority === "medium"
+          (t) => t.priority === "low" || t.priority === "medium"
         );
-        
+
         if (hasOnlyLowerPriorityTools) {
-          console.log(`✅ [CONDITIONAL] Critical tool ${plan.toolName} succeeded with good results, skipping lower priority tools`);
+          console.log(
+            `✅ [CONDITIONAL] Critical tool ${plan.toolName} succeeded with good results, skipping lower priority tools`
+          );
           break;
         }
       }
     }
-    
+
     return results;
   }
 
@@ -890,10 +963,12 @@ export class SmartContextService {
     queryType: string,
     originalPlan: ToolExecutionPlan[]
   ): Promise<SmartContextResult> {
-    console.log(`🧬 [SYNTHESIS] Combining results from ${toolResults.length} tools for query type: ${queryType}`);
-    
-    const successfulResults = toolResults.filter(r => r.success && r.data);
-    
+    console.log(
+      `🧬 [SYNTHESIS] Combining results from ${toolResults.length} tools for query type: ${queryType}`
+    );
+
+    const successfulResults = toolResults.filter((r) => r.success && r.data);
+
     if (successfulResults.length === 0) {
       return {
         summaries: [],
@@ -901,8 +976,8 @@ export class SmartContextService {
         totalAvailable: await this.getTotalSummariesCount(conversationId),
         retrieved: 0,
         metadata: {
-          warning: "No successful tool executions"
-        }
+          warning: "No successful tool executions",
+        },
       };
     }
 
@@ -912,34 +987,36 @@ export class SmartContextService {
     let hasExactMatches = false;
     const allSearchQueries: string[] = [];
     const allWarnings: string[] = [];
-    
+
     // Priority-based synthesis: critical > high > medium > low
     const priorityOrder = ["critical", "high", "medium", "low"];
-    
+
     for (const priority of priorityOrder) {
-      const priorityResults = successfulResults.filter(r => r.priority === priority);
-      
+      const priorityResults = successfulResults.filter(
+        (r) => r.priority === priority
+      );
+
       for (const result of priorityResults) {
         const data = result.data as SmartContextResult;
-        
+
         // Add source and priority information to summaries
-        const sourcedSummaries = data.summaries.map(summary => ({
+        const sourcedSummaries = data.summaries.map((summary) => ({
           ...summary,
           source: result.toolName,
-          toolPriority: result.priority
+          toolPriority: result.priority,
         }));
-        
+
         allSummaries.push(...sourcedSummaries);
         totalAvailable += data.totalAvailable;
-        
+
         if (data.metadata?.hasExactMatches) {
           hasExactMatches = true;
         }
-        
+
         if (data.metadata?.searchQueries) {
           allSearchQueries.push(...data.metadata.searchQueries);
         }
-        
+
         if (data.metadata?.warning) {
           allWarnings.push(`${result.toolName}: ${data.metadata.warning}`);
         }
@@ -948,15 +1025,17 @@ export class SmartContextService {
 
     // Remove duplicates based on content similarity (simple deduplication)
     const deduplicatedSummaries = this.deduplicateSummaries(allSummaries);
-    
-    // Calculate combined confidence
-    const avgConfidence = successfulResults.reduce((sum, r) => {
-      return sum + (r.metadata?.confidence || 0.5);
-    }, 0) / successfulResults.length;
 
-    const retrievalMethod = successfulResults.length > 1 
-       ? `multi_tool_${queryType}` 
-       : successfulResults[0]?.toolName || 'unknown';
+    // Calculate combined confidence
+    const avgConfidence =
+      successfulResults.reduce((sum, r) => {
+        return sum + (r.metadata?.confidence || 0.5);
+      }, 0) / successfulResults.length;
+
+    const retrievalMethod =
+      successfulResults.length > 1
+        ? `multi_tool_${queryType}`
+        : successfulResults[0]?.toolName || "unknown";
 
     return {
       summaries: deduplicatedSummaries,
@@ -968,31 +1047,65 @@ export class SmartContextService {
         averageSimilarity: avgConfidence,
         hasStrongMatches: hasExactMatches,
         resultCount: deduplicatedSummaries.length,
-        queryMatchRate: hasExactMatches ? 1.0 : avgConfidence
+        queryMatchRate: hasExactMatches ? 1.0 : avgConfidence,
       },
       metadata: {
-         hasExactMatches,
-         searchQueries: [...new Set(allSearchQueries)], // Remove duplicate queries
-         totalFound: deduplicatedSummaries.length,
-         ...(allWarnings.length > 0 && { warning: allWarnings.join("; ") })
-       }
+        hasExactMatches,
+        searchQueries: [...new Set(allSearchQueries)], // Remove duplicate queries
+        totalFound: deduplicatedSummaries.length,
+        ...(allWarnings.length > 0 && { warning: allWarnings.join("; ") }),
+      },
     };
   }
 
   private deduplicateSummaries(summaries: any[]): any[] {
     const seen = new Set<string>();
     const deduplicated: any[] = [];
-    
+
     for (const summary of summaries) {
       // Create a simple hash based on topic name and first 100 characters of summary text
-      const hash = `${summary.topicName}_${summary.summaryText.substring(0, 100)}`;
-      
+      const hash = `${summary.topicName}_${summary.summaryText.substring(
+        0,
+        100
+      )}`;
+
       if (!seen.has(hash)) {
         seen.add(hash);
         deduplicated.push(summary);
       }
     }
-    
+
     return deduplicated;
+  }
+
+  /**
+   * Extract broader topics from intent analysis tool execution plan
+   */
+  private extractBroaderTopicsFromIntentAnalysis(
+    intentAnalysis: IntentAnalysisResult
+  ): string[] | undefined {
+    if (!intentAnalysis.toolExecutionPlan) {
+      return undefined;
+    }
+
+    // Find semantic_topic_search tools in the execution plan
+    const semanticTools = intentAnalysis.toolExecutionPlan.filter(
+      (tool) => tool.toolName === "semantic_topic_search"
+    );
+
+    const allBroaderTopics: string[] = [];
+
+    for (const tool of semanticTools) {
+      if (tool.parameters && tool.parameters.broaderTopics) {
+        const broaderTopics = Array.isArray(tool.parameters.broaderTopics)
+          ? tool.parameters.broaderTopics
+          : [tool.parameters.broaderTopics];
+        allBroaderTopics.push(...broaderTopics);
+      }
+    }
+
+    // Remove duplicates and return
+    const uniqueBroaderTopics = [...new Set(allBroaderTopics)];
+    return uniqueBroaderTopics.length > 0 ? uniqueBroaderTopics : undefined;
   }
 }
