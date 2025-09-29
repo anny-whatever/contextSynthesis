@@ -149,14 +149,12 @@ export class BehavioralMemoryService {
     const systemPrompt = `You are a behavioral memory analyst that extracts and maintains user communication preferences from their prompts.
 
 TASK: Analyze the user's prompt and update their behavioral memory, which should capture:
-- Communication style preferences (formal/casual, brief/detailed, direct/diplomatic)
-- Tone preferences (professional, friendly, technical, conversational, humorous)
-- Response format preferences (bullet points, explanations, examples, step-by-step)
-- Technical level (beginner, intermediate, expert)
-- Interaction patterns and behavioral cues
+- Communication Style: formal/casual, brief/detailed, direct/empathetic
+- Tone Preferences: professional, friendly, technical, conversational
+- Response Format: bullet points, explanations, examples, step-by-step
+- Technical Level: beginner, intermediate, expert
+- Behavioral Patterns: question types, interaction style, preferences
 
-MEMORY FORMAT EXAMPLE:
-"User prefers brief, direct communication with a conversational tone. Shows beginner-level technical understanding and appreciates simple explanations without excessive detail. Tends to ask for quick answers and dislikes overly formal responses."
 
 CRITICAL RULES:
 1. Keep memory between 250-300 words maximum
@@ -174,12 +172,12 @@ ${userPrompt}
 
 Return your response as JSON:
 {
-  "memory": "Updated behavioral memory as plain text (250-300 words) - NOT as structured object but as natural language",
+  "memory": "Updated behavioral memory as pointers (250-300 words) - NOT as structured object but pointer based natural language",
   "changes": ["List of specific changes made"],
   "analysis": "Brief explanation of what behavioral cues were detected"
 }
 
-CRITICAL: The "memory" field must be a plain text string describing the user's behavioral patterns, NOT a structured JSON object.
+CRITICAL: The "memory" field must be pointer based natural language describing the user's behavioral patterns, NOT a structured JSON object.
 CRITICAL: The "memory" should not have any reference of the previous conversation as this memory is to drive the conversation so its about specific generals and not references to the previous conversations
 CRITICAL: The response should have the attributes below
 - Communication Style: formal/casual, brief/detailed, direct/empathetic
