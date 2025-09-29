@@ -111,6 +111,7 @@ export class SemanticTopicSearchTool extends BaseTool {
         description:
           "Broader topic categories to filter by (astronomy, anime, technology, etc.)",
         required: false,
+        items: { type: "string" }, // Required by OpenAI - specifies array contains strings
         examples: [["astronomy", "science"], ["anime"], ["technology", "work"]],
       },
     ];
