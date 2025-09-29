@@ -158,6 +158,7 @@ You are a conversational AI assistant with excellent memory and natural communic
 
 ## IMPORTANT NOTICE:
 - The timestamp provided at the bottom of the summary topics are the time when the topic was last discussed in the conversation and not of the event that was discussed. That timestamp is an isolated information about the conversation between the user and the AI assistant and has nothing to do with the even or topic discussed. So if you see timestamps like this "'**Timestamp**: The conversation about this topic happened 0 days from today, that is on 28/09/2025 and 17:11'", treat them like isolated information and do not add it or relate it to the "Content" of the topic"
+- Whenever you're giving MATH EQUATIONS, WRITE THEM IN PROPER KATEX READY AND KATEX Friendly way. Even the variables and 1 liners
 `;
   }
 
@@ -267,17 +268,6 @@ You are a conversational AI assistant with excellent memory and natural communic
       });
 
       // Update behavioral memory based on user prompt
-      console.log(
-        "🧠 [BEHAVIORAL MEMORY] Updating behavioral memory for conversation"
-      );
-      const currentBehavioralMemory =
-        await this.behavioralMemoryService.getBehavioralMemory(conversationId);
-      await this.behavioralMemoryService.updateBehavioralMemory(
-        conversationId,
-        request.message,
-        currentBehavioralMemory || undefined
-      );
-
       // Now load smart context based on intent analysis
       const smartContextResult = await this.loadSmartConversationContext(
         conversationId,
@@ -606,6 +596,17 @@ You are a conversational AI assistant with excellent memory and natural communic
         updatedIntentAnalysis,
         toolsUsed,
         context
+      );
+
+      // Update behavioral memory asynchronously (fire-and-forget)
+      // This runs in the background and doesn't block the response
+      this.updateBehavioralMemoryAsync(conversationId, request.message).catch(
+        (error: Error) => {
+          console.error(
+            "🧠 [BEHAVIORAL MEMORY] Background update failed:",
+            error
+          );
+        }
       );
 
       return {
@@ -2209,5 +2210,39 @@ ${behavioralMemory}
       contextUsed,
       decisionProcess,
     };
+  }
+
+  /**
+   * Update behavioral memory asynchronously in the background
+   * This method runs after the response is sent to avoid blocking
+   */
+  private async updateBehavioralMemoryAsync(
+    conversationId: string,
+    userMessage: string
+  ): Promise<void> {
+    try {
+      console.log(
+        "🧠 [BEHAVIORAL MEMORY] Updating behavioral memory for conversation (background)"
+      );
+
+      const currentBehavioralMemory =
+        await this.behavioralMemoryService.getBehavioralMemory(conversationId);
+
+      await this.behavioralMemoryService.updateBehavioralMemory(
+        conversationId,
+        userMessage,
+        currentBehavioralMemory || undefined
+      );
+
+      console.log(
+        "🧠 [BEHAVIORAL MEMORY] Background update completed successfully"
+      );
+    } catch (error) {
+      console.error(
+        "🧠 [BEHAVIORAL MEMORY] Background update failed:",
+        error instanceof Error ? error.message : "Unknown error"
+      );
+      // Don't throw - this is a background operation
+    }
   }
 }
