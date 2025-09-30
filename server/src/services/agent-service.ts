@@ -15,6 +15,8 @@ import { UsageTrackingService } from "./usage-tracking-service";
 import { ToolContextService } from "./tool-context-service";
 import { SummarizationQueueService } from "./summarization-queue-service";
 import { BehavioralMemoryService } from "./behavioral-memory-service";
+import { MemoryService } from "./memory-service";
+import { RoleplayService } from "./roleplay-service";
 import {
   AgentConfig,
   AgentRequest,
@@ -53,6 +55,8 @@ export class AgentService {
   private toolContextService: ToolContextService;
   private summarizationQueueService: SummarizationQueueService;
   private behavioralMemoryService: BehavioralMemoryService;
+  private memoryService: MemoryService;
+  private roleplayService: RoleplayService;
   private config: AgentConfig;
 
   constructor(
@@ -112,6 +116,8 @@ export class AgentService {
       this.openai,
       this.prisma
     );
+    this.memoryService = new MemoryService(this.prisma, this.openai, this.usageTrackingService);
+    this.roleplayService = new RoleplayService(this.prisma, this.openai, this.usageTrackingService);
 
     this.config = {
       model: process.env.DEFAULT_AGENT_MODEL || "gpt-4o-mini",
@@ -1706,19 +1712,69 @@ ${JSON.stringify(context.data, null, 2)}`;
   ): Promise<any[]> {
     // Get behavioral memory for this conversation
     const behavioralMemory =
-      await this.behavioralMemoryService.getBehavioralMemory(
+      await this.behavioralMemoryService.getBehavioralBehaviors(
         context.conversationId!
       );
 
-    // Enhance system prompt with behavioral memory
+    // Get key-value memories for this conversation
+    const memories = await this.memoryService.getMemoriesForPrompt(
+      context.conversationId!
+    );
+
+    // Get active roleplay for this conversation
+    const activeRoleplay = await this.roleplayService.getRoleplayForPrompt(
+      context.conversationId!
+    );
+
+    // Enhance system prompt with all three systems
     let enhancedSystemPrompt = this.config.systemPrompt;
-    if (behavioralMemory && behavioralMemory.trim()) {
-      enhancedSystemPrompt = `${this.config.systemPrompt}
+
+    // Add roleplay instructions first (highest priority)
+    if (activeRoleplay && activeRoleplay.trim()) {
+      enhancedSystemPrompt = `${enhancedSystemPrompt}
+
+## ACTIVE ROLEPLAY INSTRUCTIONS
+You are currently engaged in a roleplay scenario. **CRITICAL**: You MUST maintain this role consistently throughout the conversation:
+
+${activeRoleplay}
+
+**ROLEPLAY ADAPTATION RULES:**
+- Stay in character at all times unless explicitly asked to break character
+- Respond as the character would, using their voice, mannerisms, and knowledge level
+- If the roleplay conflicts with safety guidelines, prioritize safety while staying as close to character as possible
+- Use the character's perspective and background to inform all responses
+
+---`;
+    }
+
+    // Add memories (factual information about the user)
+    if (memories && memories.trim()) {
+      enhancedSystemPrompt = `${enhancedSystemPrompt}
+
+## CONVERSATION-SPECIFIC MEMORIES
+The following key information has been learned about the user from this conversation. Use this context to personalize responses:
+
+${memories}
+
+**MEMORY USAGE INSTRUCTIONS:**
+- Reference relevant memories naturally in conversation when appropriate
+- Don't explicitly mention that you "remember" something unless asked
+- Use memories to provide more personalized and contextual responses
+- If memories seem outdated or contradictory, ask for clarification
+
+---`;
+    }
+
+    // Add behavioral preferences (communication style)
+    if (behavioralMemory && Object.keys(behavioralMemory).length > 0) {
+      const behavioralText = this.behavioralMemoryService.formatBehavioralMemoryAsPoints(behavioralMemory);
+      
+      enhancedSystemPrompt = `${enhancedSystemPrompt}
 
 ## CONVERSATION-SPECIFIC BEHAVIORAL MEMORY & ADAPTATION RULES
 The following behavioral preferences and communication style have been learned from this specific conversation. **CRITICALLY IMPORTANT**: You MUST actively adapt ALL aspects of your responses based on this memory:
 
-${behavioralMemory}
+${behavioralText}
 
 ### BEHAVIORAL ADAPTATION INSTRUCTIONS:
 **Communication Style Adaptation:**
@@ -2285,11 +2341,133 @@ ${behavioralMemory}
           }
         }
       );
+
+      // Start automatic behavioral memory, memory extraction, and roleplay enhancement
+      this.startAutomaticMemoryProcessing(context, assistantMessage.content);
     } catch (error) {
       console.error("Error persisting conversation:", error);
       // Don't throw here to avoid breaking the response flow
     }
   }
+
+  /**
+   * Automatically processes behavioral memory, structured memories, and roleplay enhancement
+   * in the background without blocking the response
+   */
+  private startAutomaticMemoryProcessing(
+    context: ConversationContext,
+    assistantResponse: string
+  ): void {
+    // Get the user message from context
+    const userMessage = context.messageHistory[context.messageHistory.length - 1]?.content || "";
+
+    // Start all memory processing tasks asynchronously
+    Promise.allSettled([
+      this.updateBehavioralMemoryAsync(context.conversationId!, userMessage),
+      this.extractMemoriesAsync(context.conversationId!, userMessage, assistantResponse, context.userId),
+      this.enhanceRoleplayAsync(context.conversationId!, userMessage, assistantResponse, context.userId)
+    ]).then((results) => {
+      results.forEach((result, index) => {
+        const taskNames = ['Behavioral Memory', 'Memory Extraction', 'Roleplay Enhancement'];
+        if (result.status === 'rejected') {
+          console.error(`❌ [${taskNames[index]}] Background processing failed:`, result.reason);
+        } else {
+          console.log(`✅ [${taskNames[index]}] Background processing completed successfully`);
+        }
+      });
+    });
+  }
+
+  /**
+   * Automatically extracts structured memories from user messages
+   */
+  private async extractMemoriesAsync(
+    conversationId: string,
+    userMessage: string,
+    assistantResponse: string,
+    userId?: string
+  ): Promise<void> {
+    try {
+      console.log("🧠 [MEMORY EXTRACTION] Starting automatic memory extraction");
+
+      await this.memoryService.extractAndStoreMemories(
+        conversationId,
+        userId || null,
+        userMessage,
+        assistantResponse
+      );
+
+      console.log("🧠 [MEMORY EXTRACTION] Automatic extraction completed successfully");
+    } catch (error) {
+      console.error(
+        "🧠 [MEMORY EXTRACTION] Automatic extraction failed:",
+        error instanceof Error ? error.message : "Unknown error"
+      );
+    }
+  }
+
+  /**
+   * Automatically detects roleplay mentions and enhances them
+   */
+  private async enhanceRoleplayAsync(
+    conversationId: string,
+    userMessage: string,
+    assistantResponse: string,
+    userId?: string
+  ): Promise<void> {
+    try {
+      console.log("🎭 [ROLEPLAY ENHANCEMENT] Checking for roleplay mentions");
+
+      // Check if user message contains roleplay indicators
+      const roleplayIndicators = [
+        /you are a?n? (.+)/i,
+        /act as a?n? (.+)/i,
+        /pretend to be a?n? (.+)/i,
+        /roleplay as a?n? (.+)/i,
+        /play the role of a?n? (.+)/i,
+        /be a?n? (.+)/i
+      ];
+
+      let detectedRole: string | null = null;
+      for (const indicator of roleplayIndicators) {
+        const match = userMessage.match(indicator);
+        if (match && match[1]) {
+          detectedRole = match[1].trim();
+          break;
+        }
+      }
+
+      if (detectedRole) {
+        console.log(`🎭 [ROLEPLAY ENHANCEMENT] Detected role: ${detectedRole}`);
+
+        // Check if roleplay already exists for this conversation
+        const existingRoleplay = await this.roleplayService.getActiveRoleplay(conversationId);
+        
+        if (!existingRoleplay) {
+          // Create and enhance new roleplay using the conversation context
+          const conversationContext = `${userMessage}\n\nAssistant: ${assistantResponse}`;
+          
+          await this.roleplayService.enhanceAndStoreRoleplay(
+            conversationId,
+            userId || null,
+            detectedRole,
+            conversationContext
+          );
+
+          console.log("🎭 [ROLEPLAY ENHANCEMENT] New roleplay created and enhanced");
+        } else {
+          console.log("🎭 [ROLEPLAY ENHANCEMENT] Roleplay already exists for this conversation");
+        }
+      } else {
+        console.log("🎭 [ROLEPLAY ENHANCEMENT] No roleplay indicators detected");
+      }
+    } catch (error) {
+       console.error(
+         "🎭 [ROLEPLAY ENHANCEMENT] Automatic enhancement failed:",
+         error instanceof Error ? error.message : "Unknown error"
+       );
+     }
+   }
 
   async getConversationHistory(
     conversationId: string
@@ -2396,7 +2574,7 @@ ${behavioralMemory}
       );
 
       const currentBehavioralMemory =
-        await this.behavioralMemoryService.getBehavioralMemory(conversationId);
+        await this.behavioralMemoryService.getBehavioralBehaviors(conversationId);
 
       await this.behavioralMemoryService.updateBehavioralMemory(
         conversationId,

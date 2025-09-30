@@ -4,9 +4,18 @@ import { UsageTrackingService } from "./usage-tracking-service";
 
 export interface BehavioralMemoryUpdate {
   conversationId: string;
-  updatedMemory: string;
+  updatedBehaviors: Record<string, any>;
   changes: string[];
-  wordCount: number;
+  keyCount: number;
+}
+
+export interface BehaviorData {
+  communication_style: 'formal' | 'casual' | 'mixed';
+  response_detail: 'brief' | 'detailed' | 'balanced';
+  tone_preference: 'professional' | 'friendly' | 'technical' | 'conversational';
+  response_format: 'bullet_points' | 'explanations' | 'examples' | 'step_by_step';
+  technical_level: 'beginner' | 'intermediate' | 'expert';
+  interaction_style: 'direct' | 'empathetic' | 'analytical';
 }
 
 export class BehavioralMemoryService {
@@ -26,73 +35,72 @@ export class BehavioralMemoryService {
   async updateBehavioralMemory(
     conversationId: string,
     userPrompt: string,
-    existingMemory?: string
+    existingBehaviors?: Record<string, any>
   ): Promise<BehavioralMemoryUpdate> {
-    console.log("🧠 [BEHAVIORAL MEMORY] Updating memory for conversation:", {
+    console.log("🧠 [BEHAVIORAL MEMORY] Updating behaviors for conversation:", {
       conversationId,
       promptLength: userPrompt.length,
-      hasExistingMemory: !!existingMemory,
+      hasExistingBehaviors: !!existingBehaviors,
     });
 
     try {
-      // Analyze the prompt and update memory using AI
-      const updatedMemoryData = await this.analyzeAndUpdateMemory(
+      // Analyze the prompt and update behaviors using AI
+      const updatedBehaviorData = await this.analyzeAndUpdateBehaviors(
         userPrompt,
-        existingMemory || "",
+        existingBehaviors || {},
         conversationId
-        // Note: userId is not available in this context, but we can get it from conversation if needed
       );
 
       // Save to database
       await this.prisma.conversation.update({
         where: { id: conversationId },
         data: {
-          behavioralMemory: updatedMemoryData.memory,
+          behaviors: updatedBehaviorData.behaviors,
           updatedAt: new Date(),
         },
       });
 
-      console.log("✅ [BEHAVIORAL MEMORY] Successfully updated memory:", {
+      console.log("✅ [BEHAVIORAL MEMORY] Behaviors updated successfully:", {
         conversationId,
-        wordCount: updatedMemoryData.wordCount,
-        changes: updatedMemoryData.changes.length,
+        keyCount: updatedBehaviorData.keyCount,
+        changes: updatedBehaviorData.changes.length,
       });
 
       return {
         conversationId,
-        updatedMemory: updatedMemoryData.memory,
-        changes: updatedMemoryData.changes,
-        wordCount: updatedMemoryData.wordCount,
+        updatedBehaviors: updatedBehaviorData.behaviors,
+        changes: updatedBehaviorData.changes,
+        keyCount: updatedBehaviorData.keyCount,
       };
     } catch (error) {
-      console.error("❌ [BEHAVIORAL MEMORY] Error updating memory:", {
+      console.error("❌ [BEHAVIORAL MEMORY] Failed to update behaviors:", {
         conversationId,
         error: error instanceof Error ? error.message : String(error),
       });
 
-      // Return existing memory if update fails
+      // Return existing behaviors on error
       return {
         conversationId,
-        updatedMemory: existingMemory || "",
+        updatedBehaviors: existingBehaviors || {},
         changes: [],
-        wordCount: existingMemory ? existingMemory.split(" ").length : 0,
+        keyCount: Object.keys(existingBehaviors || {}).length,
       };
     }
   }
 
   /**
-   * Retrieves current behavioral memory for a conversation
+   * Retrieves behavioral behaviors for a conversation
    */
-  async getBehavioralMemory(conversationId: string): Promise<string | null> {
+  async getBehavioralBehaviors(conversationId: string): Promise<Record<string, any> | null> {
     try {
       const conversation = await this.prisma.conversation.findUnique({
         where: { id: conversationId },
-        select: { behavioralMemory: true },
+        select: { behaviors: true },
       });
 
-      return conversation?.behavioralMemory || null;
+      return conversation?.behaviors as Record<string, any> || null;
     } catch (error) {
-      console.error("❌ [BEHAVIORAL MEMORY] Error retrieving memory:", {
+      console.error("❌ [BEHAVIORAL MEMORY] Failed to retrieve behaviors:", {
         conversationId,
         error: error instanceof Error ? error.message : String(error),
       });
@@ -101,92 +109,136 @@ export class BehavioralMemoryService {
   }
 
   /**
-   * Manually updates behavioral memory (for user edits)
+   * Manually sets behavioral behaviors for a conversation
    */
-  async setBehavioralMemory(
+  async setBehavioralBehaviors(
     conversationId: string,
-    memory: string
+    behaviors: Record<string, any>
   ): Promise<boolean> {
     try {
-      // Validate word count
-      const wordCount = memory.trim().split(/\s+/).length;
-      if (wordCount > 300) {
-        throw new Error(`Memory too long: ${wordCount} words (max 300)`);
-      }
-
       await this.prisma.conversation.update({
         where: { id: conversationId },
         data: {
-          behavioralMemory: memory.trim(),
-          updatedAt: new Date(),
+          behaviors: behaviors,
         },
       });
 
-      console.log("✅ [BEHAVIORAL MEMORY] Manually updated memory:", {
+      console.log("✅ [BEHAVIORAL MEMORY] Behaviors set manually:", {
         conversationId,
-        wordCount,
+        keyCount: Object.keys(behaviors).length,
       });
 
       return true;
     } catch (error) {
-      console.error("❌ [BEHAVIORAL MEMORY] Error setting memory:", {
+      console.error("❌ [BEHAVIORAL MEMORY] Failed to set behaviors:", {
         conversationId,
-        error: error instanceof Error ? error.message : String(error),
+        error: error instanceof Error ? error.message : error,
       });
       return false;
     }
   }
 
   /**
+   * Converts behavioral memory from JSON format to human-readable points format
+   */
+  formatBehavioralMemoryAsPoints(behaviors: Record<string, any>): string {
+    if (!behaviors || Object.keys(behaviors).length === 0) {
+      return "";
+    }
+
+    const behaviorDescriptions: Record<string, Record<string, string>> = {
+      communication_style: {
+        formal: "• Prefers formal, professional communication with proper grammar and structure",
+        casual: "• Prefers casual, relaxed communication with informal language and tone",
+        mixed: "• Comfortable with both formal and casual communication depending on context"
+      },
+      response_detail: {
+        brief: "• Prefers concise, to-the-point responses without lengthy explanations",
+        detailed: "• Appreciates comprehensive, thorough explanations with examples and context",
+        balanced: "• Likes moderate detail - not too brief, not overly verbose"
+      },
+      tone_preference: {
+        professional: "• Expects a professional, business-like tone in interactions",
+        friendly: "• Enjoys a warm, approachable, and friendly conversational tone",
+        technical: "• Prefers precise, technical language with accurate terminology",
+        conversational: "• Likes natural, flowing conversation as if talking to a friend"
+      },
+      response_format: {
+        bullet_points: "• Prefers information organized in clear bullet points and lists",
+        explanations: "• Likes narrative explanations with flowing, connected thoughts",
+        examples: "• Values concrete examples and practical demonstrations",
+        step_by_step: "• Appreciates sequential, numbered instructions and procedures"
+      },
+      technical_level: {
+        beginner: "• Requires simple explanations without technical jargon or complex concepts",
+        intermediate: "• Comfortable with moderate technical detail and some specialized terms",
+        expert: "• Can handle advanced technical concepts, complex terminology, and detailed analysis"
+      },
+      interaction_style: {
+        direct: "• Appreciates straightforward, no-nonsense communication without fluff",
+        empathetic: "• Values understanding, supportive responses that acknowledge emotions",
+        analytical: "• Prefers logical, data-driven responses with reasoning and evidence"
+      }
+    };
+
+    const points: string[] = [];
+
+    Object.entries(behaviors).forEach(([key, value]) => {
+      const descriptions = behaviorDescriptions[key];
+      if (descriptions && descriptions[value]) {
+        points.push(descriptions[value]);
+      }
+    });
+
+    return points.join('\n');
+  }
+
+  /**
    * Uses AI to analyze prompt and intelligently update behavioral memory
    */
-  private async analyzeAndUpdateMemory(
+  private async analyzeAndUpdateBehaviors(
     userPrompt: string,
-    existingMemory: string,
+    existingBehaviors: Record<string, any>,
     conversationId?: string,
     userId?: string
-  ): Promise<{ memory: string; changes: string[]; wordCount: number }> {
-    const systemPrompt = `You are a behavioral memory analyst that extracts and maintains user communication preferences from their prompts.
+  ): Promise<{ behaviors: Record<string, any>; changes: string[]; keyCount: number }> {
+    const systemPrompt = `You are a behavioral analyst that extracts user communication preferences from prompts and stores them as key-value pairs.
 
-TASK: Analyze the user's prompt and update their behavioral memory, which should capture:
-- Communication Style: formal/casual, brief/detailed, direct/empathetic
-- Tone Preferences: professional, friendly, technical, conversational
-- Response Format: bullet points, explanations, examples, step-by-step
-- Technical Level: beginner, intermediate, expert
-- Behavioral Patterns: question types, interaction style, preferences
+TASK: Analyze the user's prompt and update their behavioral preferences using these specific keys:
+- communication_style: "formal" | "casual" | "mixed"
+- response_detail: "brief" | "detailed" | "balanced"  
+- tone_preference: "professional" | "friendly" | "technical" | "conversational"
+- response_format: "bullet_points" | "explanations" | "examples" | "step_by_step"
+- technical_level: "beginner" | "intermediate" | "expert"
+- interaction_style: "direct" | "empathetic" | "analytical"
 
-
-CRITICAL RULES:
-1. Keep memory between 250-300 words maximum
-2. Focus ONLY on communication/behavioral patterns, NOT content details
-3. Extract implicit and explicit style/tone cues from the prompt
-4. Update existing memory intelligently - don't just append
-5. Prioritize recent preferences over old ones
-6. Remove outdated or conflicting information
-
-EXISTING MEMORY:
-${existingMemory || "No existing memory"}
+EXISTING BEHAVIORS:
+${JSON.stringify(existingBehaviors, null, 2)}
 
 USER PROMPT TO ANALYZE:
 ${userPrompt}
 
 Return your response as JSON:
 {
-  "memory": "Updated behavioral memory as pointers (250-300 words) - NOT as structured object but pointer based natural language",
+  "behaviors": {
+    "communication_style": "value",
+    "response_detail": "value",
+    "tone_preference": "value", 
+    "response_format": "value",
+    "technical_level": "value",
+    "interaction_style": "value"
+  },
   "changes": ["List of specific changes made"],
   "analysis": "Brief explanation of what behavioral cues were detected"
 }
 
-CRITICAL: The "memory" field must be pointer based natural language describing the user's behavioral patterns, NOT a structured JSON object.
-CRITICAL: The "memory" should not have any reference of the previous conversation as this memory is to drive the conversation so its about specific generals and not references to the previous conversations
-CRITICAL: The response should have the attributes below
-- Communication Style: formal/casual, brief/detailed, direct/empathetic
-- Tone Preferences: professional, friendly, technical, conversational
-- Response Format: bullet points, explanations, examples, step-by-step
-- Technical Level: beginner, intermediate, expert
-- Behavioral Patterns: question types, interaction style, preferences
+RULES:
+1. Only include keys where you detect clear preferences from the prompt
+2. Preserve existing values if no new preference is detected
+3. Use exact values from the allowed options above
+4. Focus on communication patterns, not content details
 
-If no behavioral cues are detected in the prompt, return the existing memory unchanged with empty changes array.`;
+If no behavioral cues are detected, return existing behaviors unchanged with empty changes array.`;
 
     const startTime = Date.now();
 
@@ -218,7 +270,7 @@ If no behavioral cues are detected in the prompt, return the existing memory unc
           duration,
           success: !!response,
           metadata: {
-            existingMemoryLength: existingMemory.length,
+            existingBehaviorCount: Object.keys(existingBehaviors).length,
             userPromptLength: userPrompt.length,
           },
         };
@@ -245,79 +297,18 @@ If no behavioral cues are detected in the prompt, return the existing memory unc
     try {
       const parsed = JSON.parse(response);
 
-      // Handle case where AI returns structured object instead of string
-      let memoryText: string;
-      if (typeof parsed.memory === "string") {
-        memoryText = parsed.memory;
-      } else if (typeof parsed.memory === "object") {
-        console.warn(
-          "⚠️ [BEHAVIORAL MEMORY] AI returned structured memory object, converting to text"
-        );
-        // Convert structured memory to readable natural language text
-        const memoryObj = parsed.memory;
-        const parts: string[] = [];
+      // Merge existing behaviors with new ones
+      const updatedBehaviors = {
+        ...existingBehaviors,
+        ...(parsed.behaviors || {}),
+      };
 
-        // Extract communication style preferences
-        if (memoryObj.communication_style_preferences) {
-          const prefs = memoryObj.communication_style_preferences;
-          const activeStyles = Object.entries(prefs)
-            .filter(([_, value]) => value === true)
-            .map(([key, _]) => key.replace(/_/g, " "));
-          if (activeStyles.length > 0) {
-            parts.push(`Communication style: ${activeStyles.join(", ")}`);
-          }
-        }
-
-        // Extract tone preferences
-        if (memoryObj.tone_preferences) {
-          const prefs = memoryObj.tone_preferences;
-          const activeTones = Object.entries(prefs)
-            .filter(([_, value]) => value === true)
-            .map(([key, _]) => key.replace(/_/g, " "));
-          if (activeTones.length > 0) {
-            parts.push(`Tone: ${activeTones.join(", ")}`);
-          }
-        }
-
-        // Extract technical level
-        if (memoryObj.technical_level) {
-          parts.push(`Technical level: ${memoryObj.technical_level}`);
-        }
-
-        // Extract interaction patterns
-        if (memoryObj.interaction_patterns) {
-          const patterns = Object.entries(memoryObj.interaction_patterns)
-            .filter(([_, value]) => value === true)
-            .map(([key, _]) => key.replace(/_/g, " "));
-          if (patterns.length > 0) {
-            parts.push(`Interaction patterns: ${patterns.join(", ")}`);
-          }
-        }
-
-        memoryText =
-          parts.length > 0
-            ? parts.join(". ") + "."
-            : "No specific behavioral preferences detected";
-      } else {
-        throw new Error("Memory field is not a string or object");
-      }
-
-      const wordCount = memoryText.trim().split(/\s+/).length;
-
-      // Validate word count
-      if (wordCount > 300) {
-        console.warn("⚠️ [BEHAVIORAL MEMORY] Memory too long, truncating:", {
-          wordCount,
-        });
-        // Truncate to 300 words
-        const words = memoryText.trim().split(/\s+/);
-        memoryText = words.slice(0, 300).join(" ");
-      }
+      const keyCount = Object.keys(updatedBehaviors).length;
 
       return {
-        memory: memoryText.trim(),
+        behaviors: updatedBehaviors,
         changes: parsed.changes || [],
-        wordCount: memoryText.trim().split(/\s+/).length,
+        keyCount,
       };
     } catch (parseError) {
       console.error("❌ [BEHAVIORAL MEMORY] Failed to parse AI response:", {
@@ -325,11 +316,11 @@ If no behavioral cues are detected in the prompt, return the existing memory unc
         error: parseError,
       });
 
-      // Fallback: return existing memory
+      // Fallback: return existing behaviors
       return {
-        memory: existingMemory,
+        behaviors: existingBehaviors,
         changes: [],
-        wordCount: existingMemory ? existingMemory.split(/\s+/).length : 0,
+        keyCount: Object.keys(existingBehaviors).length,
       };
     }
   }

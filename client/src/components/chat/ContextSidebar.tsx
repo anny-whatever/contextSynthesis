@@ -12,9 +12,13 @@ import {
   Clock,
   Target,
   User,
+  Database,
+  Theater,
 } from "lucide-react";
 import { ChatApiService } from "../../services/chatApi";
 import { BehavioralMemory } from "./BehavioralMemory";
+import { MemoryManagement } from "./MemoryManagement";
+import { RoleplayManagement } from "./RoleplayManagement";
 import type { Summary, IntentAnalysis } from "../../types/chat";
 
 interface ContextSidebarProps {
@@ -154,14 +158,28 @@ export function ContextSidebar({
           </div>
         )}
 
-        <Tabs defaultValue="memory" className="h-full">
-          <TabsList className="grid grid-cols-3 mx-2">
+        <Tabs defaultValue="behavioral" className="h-full">
+          <TabsList className="grid grid-cols-5 mx-2">
             <TabsTrigger
-              value="memory"
+              value="behavioral"
               className="flex gap-1 items-center text-xs"
             >
               <User className="w-3 h-3" />
-              Memory
+              Behavioral
+            </TabsTrigger>
+            <TabsTrigger
+              value="memories"
+              className="flex gap-1 items-center text-xs"
+            >
+              <Database className="w-3 h-3" />
+              Memories
+            </TabsTrigger>
+            <TabsTrigger
+              value="roleplay"
+              className="flex gap-1 items-center text-xs"
+            >
+              <Theater className="w-3 h-3" />
+              Roleplay
             </TabsTrigger>
             <TabsTrigger
               value="intent"
@@ -179,10 +197,18 @@ export function ContextSidebar({
             </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="memory" className="mt-0">
+          <TabsContent value="behavioral" className="mt-0">
             <ScrollArea className="h-[calc(100vh-200px)]">
               <BehavioralMemory conversationId={conversationId} />
             </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="memories" className="mt-0">
+            <MemoryManagement conversationId={conversationId} />
+          </TabsContent>
+
+          <TabsContent value="roleplay" className="mt-0">
+            <RoleplayManagement conversationId={conversationId} />
           </TabsContent>
 
           <TabsContent value="intent" className="mt-0">

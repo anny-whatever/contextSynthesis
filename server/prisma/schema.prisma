@@ -15,6 +15,8 @@ model User {
   updatedAt     DateTime        @updatedAt
   conversations Conversation[]
   usageTracking UsageTracking[]
+  memories      Memory[]
+  roleplays     Roleplay[]
 
   @@map("users")
 }
@@ -23,7 +25,8 @@ model Conversation {
   id                String                @id @default(cuid())
   title             String?
   userId            String?
-  behavioralMemory  String?               // Stores 250-300 words of conversation-specific behavioral memory
+  behavioralMemory  String?               // Legacy field - will be migrated to behaviors
+  behaviors         Json?                 // Key-value pairs for user communication preferences
   totalInputTokens  Int                   @default(0)
   totalOutputTokens Int                   @default(0)
   totalCost         Float                 @default(0.0)
@@ -34,6 +37,8 @@ model Conversation {
   intentAnalyses    IntentAnalysis[]
   messages          Message[]
   usageTracking     UsageTracking[]
+  memories          Memory[]
+  roleplays         Roleplay[]
 
   @@map("conversations")
 }
@@ -182,6 +187,42 @@ enum ToolStatus {
   FAILED
 }
 
+model Memory {
+  id              String       @id @default(cuid())
+  conversationId  String
+  userId          String?
+  category        String       // 'people', 'places', 'events', 'life_events', 'things'
+  keyValuePairs   Json         // Key-value pairs for this category
+  lastUpdated     DateTime     @default(now())
+  confidenceScore Float?       @default(1.0)
+  createdAt       DateTime     @default(now())
+  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user            User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, category])
+  @@index([userId, category])
+  @@index([category])
+  @@map("memories")
+}
+
+model Roleplay {
+  id                   String       @id @default(cuid())
+  conversationId       String
+  userId               String?
+  baseRole             String
+  enhancedInstructions String?
+  isActive             Boolean      @default(false)
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
+  conversation         Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  user                 User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([userId])
+  @@index([isActive])
+  @@map("roleplays")
+}
+
 enum UsageOperationType {
   AGENT_COMPLETION
   INTENT_ANALYSIS
@@ -190,4 +231,6 @@ enum UsageOperationType {
   TOOL_CALL
   EMBEDDING_GENERATION
   BEHAVIORAL_MEMORY
+  MEMORY_EXTRACTION
+  ROLEPLAY_ENHANCEMENT
 }

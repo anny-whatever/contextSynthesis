@@ -6,6 +6,8 @@ import type {
   Summary,
   IntentAnalysis,
   TokenData,
+  Memory,
+  Roleplay,
 } from "../types/chat";
 
 // Streaming event types
@@ -312,6 +314,7 @@ export class ChatApiService {
     data: {
       conversationId: string;
       behavioralMemory: string;
+      behaviors: Record<string, any>;
       wordCount: number;
     };
   }> {
@@ -320,6 +323,7 @@ export class ChatApiService {
       data: {
         conversationId: string;
         behavioralMemory: string;
+        behaviors: Record<string, any>;
         wordCount: number;
       };
     }>(`/chat/conversations/${conversationId}/behavioral-memory`);
@@ -348,6 +352,138 @@ export class ChatApiService {
     }>(`/chat/conversations/${conversationId}/behavioral-memory`, {
       method: "PUT",
       body: JSON.stringify({ behavioralMemory }),
+    });
+  }
+
+  // Memory API methods
+  static async getMemories(conversationId: string): Promise<{
+    success: boolean;
+    data: { memories: Memory[] };
+  }> {
+    return this.request(`/chat/conversations/${conversationId}/memories`);
+  }
+
+  static async updateMemory(
+    conversationId: string,
+    category: string,
+    keyValuePairs: Record<string, any>
+  ): Promise<{
+    success: boolean;
+    data: { memory: Memory; message: string };
+  }> {
+    return this.request(`/chat/conversations/${conversationId}/memories/${category}`, {
+      method: "PUT",
+      body: JSON.stringify({ keyValuePairs }),
+    });
+  }
+
+  static async deleteMemory(
+    conversationId: string,
+    category: string,
+    key: string
+  ): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    return this.request(
+      `/chat/conversations/${conversationId}/memories/${category}/${key}`,
+      {
+        method: "DELETE",
+      }
+    );
+  }
+
+  // Roleplay API methods
+  static async getRoleplays(conversationId: string): Promise<{
+    success: boolean;
+    data: { roleplays: Roleplay[] };
+  }> {
+    return this.request<{ success: boolean; data: { roleplays: Roleplay[] } }>(
+      `/chat/conversations/${conversationId}/roleplays`
+    );
+  }
+
+  static async createRoleplay(
+    conversationId: string,
+    roleplay: {
+      name: string;
+      description: string;
+      systemPrompt: string;
+      isActive: boolean;
+    }
+  ): Promise<{
+    success: boolean;
+    data: { roleplay: Roleplay; message: string };
+  }> {
+    return this.request<{
+      success: boolean;
+      data: { roleplay: Roleplay; message: string };
+    }>(`/chat/conversations/${conversationId}/roleplays`, {
+      method: "POST",
+      body: JSON.stringify(roleplay),
+    });
+  }
+
+  static async updateRoleplay(
+    conversationId: string,
+    roleplayId: string,
+    updates: Partial<Omit<Roleplay, "id" | "conversationId" | "userId" | "createdAt">>
+  ): Promise<{
+    success: boolean;
+    data: { roleplay: Roleplay; message: string };
+  }> {
+    return this.request<{
+      success: boolean;
+      data: { roleplay: Roleplay; message: string };
+    }>(`/chat/conversations/${conversationId}/roleplays/${roleplayId}`, {
+      method: "PUT",
+      body: JSON.stringify(updates),
+    });
+  }
+
+  static async deleteRoleplay(
+    conversationId: string,
+    roleplayId: string
+  ): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    return this.request<{
+      success: boolean;
+      message: string;
+    }>(`/chat/conversations/${conversationId}/roleplays/${roleplayId}`, {
+      method: "DELETE",
+    });
+  }
+
+  static async enhanceRoleplay(
+    conversationId: string,
+    roleplayId: string
+  ): Promise<{
+    success: boolean;
+    data: { roleplay: Roleplay; message: string };
+  }> {
+    return this.request<{
+      success: boolean;
+      data: { roleplay: Roleplay; message: string };
+    }>(`/chat/conversations/${conversationId}/roleplays/${roleplayId}/enhance`, {
+      method: "POST",
+    });
+  }
+
+  static async enhanceRoleplayPreview(
+    conversationId: string,
+    roleplayData: { name: string; description: string }
+  ): Promise<{
+    success: boolean;
+    data: { enhancedSystemPrompt: string; confidence: number };
+  }> {
+    return this.request<{
+      success: boolean;
+      data: { enhancedSystemPrompt: string; confidence: number };
+    }>(`/chat/conversations/${conversationId}/roleplays/enhance-preview`, {
+      method: "POST",
+      body: JSON.stringify(roleplayData),
     });
   }
 }

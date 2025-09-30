@@ -103,3 +103,26 @@ export interface TokenData {
     toolTokens: number;
   };
 }
+
+export interface Memory {
+  id: string;
+  conversationId: string;
+  userId: string;
+  category: string;
+  keyValuePairs: Record<string, any>;
+  lastUpdated: Date;
+  confidenceScore: number;
+  createdAt: Date;
+}
+
+export interface Roleplay {
+  id: string;
+  conversationId: string;
+  userId: string;
+  name: string;
+  description: string;
+  systemPrompt: string;
+  isActive: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}

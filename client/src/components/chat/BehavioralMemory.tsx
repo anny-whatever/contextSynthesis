@@ -1,11 +1,11 @@
 import { useState, useEffect } from "react";
-import { Card, CardContent } from "../ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
 import { Textarea } from "../ui/textarea";
 import { Button } from "../ui/button";
 import { Badge } from "../ui/badge";
 import { Alert, AlertDescription } from "../ui/alert";
 import { Skeleton } from "../ui/skeleton";
-import { AlertCircle, Save, RefreshCw, Brain, Edit } from "lucide-react";
+import { AlertCircle, Save, RefreshCw, Brain, Edit, Eye, EyeOff } from "lucide-react";
 import { ChatApiService } from "../../services/chatApi";
 
 interface BehavioralMemoryProps {
@@ -15,6 +15,7 @@ interface BehavioralMemoryProps {
 export function BehavioralMemory({ conversationId }: BehavioralMemoryProps) {
   const [behavioralMemory, setBehavioralMemory] = useState("");
   const [originalMemory, setOriginalMemory] = useState("");
+  const [behaviors, setBehaviors] = useState<Record<string, any>>({});
   const [wordCount, setWordCount] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -22,6 +23,7 @@ export function BehavioralMemory({ conversationId }: BehavioralMemoryProps) {
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [hasChanges, setHasChanges] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [viewMode, setViewMode] = useState<'points' | 'raw'>('points');
 
   // Load behavioral memory when conversation changes
   useEffect(() => {
@@ -48,11 +50,13 @@ export function BehavioralMemory({ conversationId }: BehavioralMemoryProps) {
   const resetState = () => {
     setBehavioralMemory("");
     setOriginalMemory("");
+    setBehaviors({});
     setWordCount(0);
     setError(null);
     setSuccessMessage(null);
     setHasChanges(false);
     setIsEditing(false);
+    setViewMode('points');
   };
 
   const loadBehavioralMemory = async () => {
@@ -63,8 +67,10 @@ export function BehavioralMemory({ conversationId }: BehavioralMemoryProps) {
       setError(null);
       const response = await ChatApiService.getBehavioralMemory(conversationId);
       const memory = response.data.behavioralMemory || "";
+      const behaviorsData = response.data.behaviors || {};
       setBehavioralMemory(memory);
       setOriginalMemory(memory);
+      setBehaviors(behaviorsData);
       setWordCount(response.data.wordCount);
       setHasChanges(false);
     } catch (err) {
@@ -108,8 +114,41 @@ export function BehavioralMemory({ conversationId }: BehavioralMemoryProps) {
   const handleDiscard = () => {
     setBehavioralMemory(originalMemory);
     setHasChanges(false);
-    setIsEditing(false);
     setSuccessMessage(null);
+    setError(null);
+  };
+
+  // Helper function to format behavior keys for display
+  const formatBehaviorKey = (key: string): string => {
+    return key.split('_').map(word => 
+      word.charAt(0).toUpperCase() + word.slice(1)
+    ).join(' ');
+  };
+
+  // Helper function to render behaviors in a structured format
+  const renderBehaviorsStructured = () => {
+    if (!behaviors || Object.keys(behaviors).length === 0) {
+      return (
+        <div className="text-sm text-muted-foreground italic p-4 text-center">
+          No behavioral preferences detected yet. The AI will learn your preferences as you interact.
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-3">
+        {Object.entries(behaviors).map(([key, value]) => (
+          <div key={key} className="flex items-center justify-between p-3 bg-muted/50 rounded-lg">
+            <span className="text-sm font-medium text-foreground">
+              {formatBehaviorKey(key)}
+            </span>
+            <Badge variant="secondary" className="text-xs">
+              {typeof value === 'string' ? value.replace(/_/g, ' ') : String(value)}
+            </Badge>
+          </div>
+        ))}
+      </div>
+    );
   };
 
   const getWordCountColor = () => {
@@ -182,7 +221,44 @@ export function BehavioralMemory({ conversationId }: BehavioralMemoryProps) {
         </Card>
       ) : (
         <Card>
-          <CardContent className="p-4 space-y-4">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <Brain className="w-5 h-5" />
+                Behavioral Preferences
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setViewMode(viewMode === 'points' ? 'raw' : 'points')}
+                  className="text-xs"
+                >
+                  {viewMode === 'points' ? (
+                    <>
+                      <EyeOff className="w-3 h-3 mr-1" />
+                      Raw
+                    </>
+                  ) : (
+                    <>
+                      <Eye className="w-3 h-3 mr-1" />
+                      Points
+                    </>
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsEditing(!isEditing)}
+                  className="text-xs"
+                >
+                  <Edit className="w-3 h-3 mr-1" />
+                  {isEditing ? 'View' : 'Edit'}
+                </Button>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
             {/* Description */}
             <p className="text-xs text-muted-foreground">
               This memory captures your communication preferences and behavioral
@@ -190,63 +266,86 @@ export function BehavioralMemory({ conversationId }: BehavioralMemoryProps) {
               style, and approach to match your preferences.
             </p>
 
-            {/* Textarea */}
-            <Textarea
-              value={behavioralMemory}
-              onChange={handleTextareaChange}
-              placeholder="The AI will automatically update this memory based on your interactions. You can also edit it manually to specify your preferences..."
-              className="min-h-[200px] text-sm"
-              disabled={isSaving}
-            />
-
-            {/* Action Buttons */}
-            <div className="flex items-center justify-between">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={loadBehavioralMemory}
-                disabled={isLoading || isSaving}
-                className="text-xs"
-              >
-                <RefreshCw
-                  className={`w-3 h-3 mr-1 ${isLoading ? "animate-spin" : ""}`}
-                />
-                Refresh
-              </Button>
-
-              <div className="flex gap-2">
-                {hasChanges && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleDiscard}
-                    disabled={isSaving}
-                    className="text-xs"
-                  >
-                    Discard
-                  </Button>
+            {/* Content Display */}
+            {!isEditing ? (
+              <div className="min-h-[200px]">
+                {viewMode === 'points' ? (
+                  Object.keys(behaviors).length > 0 ? (
+                    renderBehaviorsStructured()
+                  ) : (
+                    <div className="text-sm text-muted-foreground italic p-4 text-center">
+                      No behavioral preferences detected yet. The AI will learn your preferences as you interact.
+                    </div>
+                  )
+                ) : (
+                  <div className="bg-muted/30 p-4 rounded-lg">
+                    <pre className="text-sm whitespace-pre-wrap text-foreground">
+                      {behavioralMemory || "No behavioral memory available."}
+                    </pre>
+                  </div>
                 )}
+              </div>
+            ) : (
+              /* Textarea for editing */
+              <Textarea
+                value={behavioralMemory}
+                onChange={handleTextareaChange}
+                placeholder="The AI will automatically update this memory based on your interactions. You can also edit it manually to specify your preferences..."
+                className="min-h-[200px] text-sm"
+                disabled={isSaving}
+              />
+            )}
 
+            {/* Action Buttons - Only show when editing */}
+            {isEditing && (
+              <div className="flex items-center justify-between">
                 <Button
-                  onClick={saveBehavioralMemory}
-                  disabled={!hasChanges || isSaving || wordCount > 300}
+                  variant="outline"
                   size="sm"
+                  onClick={loadBehavioralMemory}
+                  disabled={isLoading || isSaving}
                   className="text-xs"
                 >
-                  {isSaving ? (
-                    <>
-                      <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
-                      Saving...
-                    </>
-                  ) : (
-                    <>
-                      <Save className="w-3 h-3 mr-1" />
-                      Save
-                    </>
-                  )}
+                  <RefreshCw
+                    className={`w-3 h-3 mr-1 ${isLoading ? "animate-spin" : ""}`}
+                  />
+                  Refresh
                 </Button>
+
+                <div className="flex gap-2">
+                  {hasChanges && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDiscard}
+                      disabled={isSaving}
+                      className="text-xs"
+                    >
+                      Discard
+                    </Button>
+                  )}
+
+                  <Button
+                    onClick={saveBehavioralMemory}
+                    disabled={!hasChanges || isSaving || wordCount > 300}
+                    size="sm"
+                    className="text-xs"
+                  >
+                    {isSaving ? (
+                      <>
+                        <RefreshCw className="w-3 h-3 mr-1 animate-spin" />
+                        Saving...
+                      </>
+                    ) : (
+                      <>
+                        <Save className="w-3 h-3 mr-1" />
+                        Save
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
-            </div>
+            )}
 
             {/* Word count warning */}
             {wordCount > 250 && (
