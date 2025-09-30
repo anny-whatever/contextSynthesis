@@ -10,7 +10,6 @@ import {
 import { asyncHandler } from "../middleware/error-handler";
 import { AgentService } from "../services/agent-service";
 import { BehavioralMemoryService } from "../services/behavioral-memory-service";
-import { RoleplayService } from "../services/roleplay-service";
 import { encode } from "gpt-tokenizer";
 
 // Streaming interfaces
@@ -567,7 +566,7 @@ router.get(
   validateConversationId,
   asyncHandler(async (req: Request, res: Response) => {
     const { id: conversationId } = req.params;
-    
+
     if (!conversationId) {
       return res.status(400).json({
         success: false,
@@ -654,65 +653,66 @@ router.get(
 );
 
 // GET /api/chat/conversations/:id/behavioral-memory - Get behavioral memory for conversation
-  router.get(
-    "/conversations/:id/behavioral-memory",
-    apiLimiter,
-    validateConversationId,
-    asyncHandler(async (req: Request, res: Response) => {
-      const { id: conversationId } = req.params;
+router.get(
+  "/conversations/:id/behavioral-memory",
+  apiLimiter,
+  validateConversationId,
+  asyncHandler(async (req: Request, res: Response) => {
+    const { id: conversationId } = req.params;
 
-      if (!conversationId) {
-        return res.status(400).json({
-          success: false,
-          error: {
-            message: "Conversation ID is required",
-            statusCode: 400,
-          },
-        });
-      }
+    if (!conversationId) {
+      return res.status(400).json({
+        success: false,
+        error: {
+          message: "Conversation ID is required",
+          statusCode: 400,
+        },
+      });
+    }
 
-      try {
-        // Get both the new behaviors JSON field and legacy behavioralMemory string field
-        const conversation = await prisma.conversation.findUnique({
-          where: { id: conversationId },
-          select: { 
-            behaviors: true,
-            behavioralMemory: true 
-          },
-        });
+    try {
+      // Get both the new behaviors JSON field and legacy behavioralMemory string field
+      const conversation = await prisma.conversation.findUnique({
+        where: { id: conversationId },
+        select: {
+          behaviors: true,
+          behavioralMemory: true,
+        },
+      });
 
-        const behaviors = conversation?.behaviors as Record<string, any> || {};
-        const legacyBehavioralMemory = conversation?.behavioralMemory || "";
-        
-        // Format behaviors as human-readable points
-        const behavioralMemoryPoints = behavioralMemoryService.formatBehavioralMemoryAsPoints(behaviors);
-        
-        // Use points format if available, otherwise fall back to legacy string
-        const displayMemory = behavioralMemoryPoints || legacyBehavioralMemory;
+      const behaviors = (conversation?.behaviors as Record<string, any>) || {};
+      const legacyBehavioralMemory = conversation?.behavioralMemory || "";
 
-        return res.json({
-          success: true,
-          data: {
-            conversationId,
-            behavioralMemory: displayMemory,
-            behaviors: behaviors,
-            wordCount: displayMemory
-              ? displayMemory.trim().split(/\s+/).length
-              : 0,
-          },
-        });
-      } catch (error) {
-        console.error("Error getting behavioral memory:", error);
-        return res.status(500).json({
-          success: false,
-          error: {
-            message: "Failed to get behavioral memory",
-            statusCode: 500,
-          },
-        });
-      }
-    })
-  );
+      // Format behaviors as human-readable points
+      const behavioralMemoryPoints =
+        behavioralMemoryService.formatBehavioralMemoryAsPoints(behaviors);
+
+      // Use points format if available, otherwise fall back to legacy string
+      const displayMemory = behavioralMemoryPoints || legacyBehavioralMemory;
+
+      return res.json({
+        success: true,
+        data: {
+          conversationId,
+          behavioralMemory: displayMemory,
+          behaviors: behaviors,
+          wordCount: displayMemory
+            ? displayMemory.trim().split(/\s+/).length
+            : 0,
+        },
+      });
+    } catch (error) {
+      console.error("Error getting behavioral memory:", error);
+      return res.status(500).json({
+        success: false,
+        error: {
+          message: "Failed to get behavioral memory",
+          statusCode: 500,
+        },
+      });
+    }
+  })
+);
 
 // PUT /api/chat/conversations/:id/behavioral-memory - Update behavioral memory for conversation
 router.put(
@@ -781,578 +781,6 @@ router.put(
         success: false,
         error: {
           message: "Failed to update behavioral memory",
-          statusCode: 500,
-        },
-      });
-    }
-  })
-);
-
-
-
-
-
-
-
-// ===== ROLEPLAY MANAGEMENT ROUTES =====
-
-// GET /api/chat/conversations/:id/roleplays - Get all roleplays for a conversation
-router.get(
-  "/conversations/:id/roleplays",
-  apiLimiter,
-  validateConversationId,
-  asyncHandler(async (req: Request, res: Response) => {
-    const { id: conversationId } = req.params;
-
-    if (!conversationId) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          message: "Conversation ID is required",
-          statusCode: 400,
-        },
-      });
-    }
-
-    try {
-      // Get conversation to verify it exists and get userId
-      const conversation = await prisma.conversation.findUnique({
-        where: { id: conversationId },
-        select: { userId: true },
-      });
-
-      if (!conversation) {
-        return res.status(404).json({
-          success: false,
-          error: {
-            message: "Conversation not found",
-            statusCode: 404,
-          },
-        });
-      }
-
-      // Get all roleplays for this conversation
-      const roleplays = await prisma.roleplay.findMany({
-        where: { conversationId },
-        orderBy: { updatedAt: "desc" },
-        select: {
-          id: true,
-          conversationId: true,
-          userId: true,
-          baseRole: true,
-          enhancedInstructions: true,
-          isActive: true,
-          createdAt: true,
-          updatedAt: true,
-        },
-      });
-
-      return res.json({
-        success: true,
-        data: {
-          roleplays: roleplays.map(roleplay => ({
-            id: roleplay.id,
-            conversationId: roleplay.conversationId,
-            userId: roleplay.userId,
-            name: roleplay.baseRole, // Map baseRole to name for frontend compatibility
-            description: roleplay.baseRole,
-            systemPrompt: roleplay.enhancedInstructions || "",
-            isActive: roleplay.isActive,
-            createdAt: roleplay.createdAt,
-            updatedAt: roleplay.updatedAt,
-          })),
-        },
-      });
-    } catch (error) {
-      console.error("Error getting roleplays:", error);
-      return res.status(500).json({
-        success: false,
-        error: {
-          message: "Failed to get roleplays",
-          statusCode: 500,
-        },
-      });
-    }
-  })
-);
-
-// POST /api/chat/conversations/:id/roleplays - Create a new roleplay
-router.post(
-  "/conversations/:id/roleplays",
-  apiLimiter,
-  validateConversationId,
-  asyncHandler(async (req: Request, res: Response) => {
-    const { id: conversationId } = req.params;
-    const { name, description, systemPrompt, isActive = false } = req.body;
-    
-    if (!conversationId) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          message: "Conversation ID is required",
-          statusCode: 400,
-        },
-      });
-    }
-
-    if (!name || typeof name !== "string") {
-      return res.status(400).json({
-        success: false,
-        error: {
-          message: "Name is required and must be a string",
-          statusCode: 400,
-        },
-      });
-    }
-
-    try {
-      // Get conversation to verify it exists and get userId
-      const conversation = await prisma.conversation.findUnique({
-        where: { id: conversationId },
-        select: { userId: true },
-      });
-
-      if (!conversation) {
-        return res.status(404).json({
-          success: false,
-          error: {
-            message: "Conversation not found",
-            statusCode: 404,
-          },
-        });
-      }
-
-      // If this roleplay should be active, deactivate others first
-      if (isActive) {
-        await prisma.roleplay.updateMany({
-          where: { conversationId, isActive: true },
-          data: { isActive: false },
-        });
-      }
-
-      // Create the new roleplay
-      const newRoleplay = await prisma.roleplay.create({
-        data: {
-          conversationId,
-          userId: conversation.userId,
-          baseRole: name,
-          enhancedInstructions: systemPrompt || null,
-          isActive: isActive,
-        },
-      });
-
-      return res.json({
-        success: true,
-        data: {
-          roleplay: {
-            id: newRoleplay.id,
-            conversationId: newRoleplay.conversationId,
-            userId: newRoleplay.userId,
-            name: newRoleplay.baseRole,
-            description: newRoleplay.baseRole,
-            systemPrompt: newRoleplay.enhancedInstructions || "",
-            isActive: newRoleplay.isActive,
-            createdAt: newRoleplay.createdAt,
-            updatedAt: newRoleplay.updatedAt,
-          },
-          message: "Roleplay created successfully",
-        },
-      });
-    } catch (error) {
-      console.error("Error creating roleplay:", error);
-      return res.status(500).json({
-        success: false,
-        error: {
-          message: "Failed to create roleplay",
-          statusCode: 500,
-        },
-      });
-    }
-  })
-);
-
-// PUT /api/chat/conversations/:id/roleplays/:roleplayId - Update a roleplay
-router.put(
-  "/conversations/:id/roleplays/:roleplayId",
-  apiLimiter,
-  validateConversationId,
-  asyncHandler(async (req: Request, res: Response) => {
-    const { id: conversationId, roleplayId } = req.params;
-    const { name, description, systemPrompt, isActive } = req.body;
-    
-    if (!conversationId || !roleplayId) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          message: "Conversation ID and Roleplay ID are required",
-          statusCode: 400,
-        },
-      });
-    }
-
-    try {
-      // Verify the roleplay exists and belongs to this conversation
-      const existingRoleplay = await prisma.roleplay.findFirst({
-        where: {
-          id: roleplayId,
-          conversationId,
-        },
-      });
-
-      if (!existingRoleplay) {
-        return res.status(404).json({
-          success: false,
-          error: {
-            message: "Roleplay not found",
-            statusCode: 404,
-          },
-        });
-      }
-
-      // If setting this roleplay to active, deactivate others first
-      if (isActive === true) {
-        await prisma.roleplay.updateMany({
-          where: { 
-            conversationId, 
-            isActive: true,
-            id: { not: roleplayId }
-          },
-          data: { isActive: false },
-        });
-      }
-
-      // Prepare update data
-      const updateData: any = {
-        updatedAt: new Date(),
-      };
-
-      if (name !== undefined) updateData.baseRole = name;
-      if (systemPrompt !== undefined) updateData.enhancedInstructions = systemPrompt;
-      if (isActive !== undefined) updateData.isActive = isActive;
-
-      // Update the roleplay
-      const updatedRoleplay = await prisma.roleplay.update({
-        where: { id: roleplayId },
-        data: updateData,
-      });
-
-      return res.json({
-        success: true,
-        data: {
-          roleplay: {
-            id: updatedRoleplay.id,
-            conversationId: updatedRoleplay.conversationId,
-            userId: updatedRoleplay.userId,
-            name: updatedRoleplay.baseRole,
-            description: updatedRoleplay.baseRole,
-            systemPrompt: updatedRoleplay.enhancedInstructions || "",
-            isActive: updatedRoleplay.isActive,
-            createdAt: updatedRoleplay.createdAt,
-            updatedAt: updatedRoleplay.updatedAt,
-          },
-          message: "Roleplay updated successfully",
-        },
-      });
-    } catch (error) {
-      console.error("Error updating roleplay:", error);
-      return res.status(500).json({
-        success: false,
-        error: {
-          message: "Failed to update roleplay",
-          statusCode: 500,
-        },
-      });
-    }
-  })
-);
-
-// DELETE /api/chat/conversations/:id/roleplays/:roleplayId - Delete a roleplay
-router.delete(
-  "/conversations/:id/roleplays/:roleplayId",
-  apiLimiter,
-  validateConversationId,
-  asyncHandler(async (req: Request, res: Response) => {
-    const { id: conversationId, roleplayId } = req.params;
-    
-    if (!conversationId || !roleplayId) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          message: "Conversation ID and Roleplay ID are required",
-          statusCode: 400,
-        },
-      });
-    }
-
-    try {
-      // Verify the roleplay exists and belongs to this conversation
-      const existingRoleplay = await prisma.roleplay.findFirst({
-        where: {
-          id: roleplayId,
-          conversationId,
-        },
-      });
-
-      if (!existingRoleplay) {
-        return res.status(404).json({
-          success: false,
-          error: {
-            message: "Roleplay not found",
-            statusCode: 404,
-          },
-        });
-      }
-
-      // Delete the roleplay
-      await prisma.roleplay.delete({
-        where: { id: roleplayId },
-      });
-
-      return res.json({
-        success: true,
-        message: "Roleplay deleted successfully",
-      });
-    } catch (error) {
-      console.error("Error deleting roleplay:", error);
-      return res.status(500).json({
-        success: false,
-        error: {
-          message: "Failed to delete roleplay",
-          statusCode: 500,
-        },
-      });
-    }
-  })
-);
-
-// POST /api/chat/conversations/:id/roleplays/:roleplayId/enhance - Enhance a roleplay with AI
-router.post(
-  "/conversations/:id/roleplays/:roleplayId/enhance",
-  apiLimiter,
-  validateConversationId,
-  asyncHandler(async (req: Request, res: Response) => {
-    const { id: conversationId, roleplayId } = req.params;
-    
-    if (!conversationId || !roleplayId) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          message: "Conversation ID and Roleplay ID are required",
-          statusCode: 400,
-        },
-      });
-    }
-
-    try {
-      // Verify the roleplay exists and belongs to this conversation
-      const existingRoleplay = await prisma.roleplay.findFirst({
-        where: {
-          id: roleplayId,
-          conversationId,
-        },
-      });
-
-      if (!existingRoleplay) {
-        return res.status(404).json({
-          success: false,
-          error: {
-            message: "Roleplay not found",
-            statusCode: 404,
-          },
-        });
-      }
-
-      // Get conversation context for enhancement
-      const conversation = await prisma.conversation.findUnique({
-        where: { id: conversationId },
-        include: {
-          messages: {
-            orderBy: { createdAt: "desc" },
-            take: 10, // Last 10 messages for context
-          },
-        },
-      });
-
-      if (!conversation) {
-        return res.status(404).json({
-          success: false,
-          error: {
-            message: "Conversation not found",
-            statusCode: 404,
-          },
-        });
-      }
-
-      // Create conversation context from recent messages
-      const conversationContext = conversation.messages
-        .reverse()
-        .map((msg: any) => `${msg.role}: ${msg.content}`)
-        .join('\n');
-
-      // Initialize roleplay service with required dependencies
-      const openai = new (await import("openai")).default({ 
-        apiKey: process.env.OPENAI_API_KEY 
-      });
-      const { UsageTrackingService } = await import("../services/usage-tracking-service");
-      const usageTrackingService = new UsageTrackingService(prisma);
-      const roleplayService = new RoleplayService(prisma, openai, usageTrackingService);
-
-      // Enhance the roleplay
-      const success = await roleplayService.enhanceAndStoreRoleplay(
-        conversationId,
-        conversation.userId,
-        existingRoleplay.baseRole,
-        conversationContext
-      );
-
-      if (!success) {
-        return res.status(500).json({
-          success: false,
-          error: {
-            message: "Failed to enhance roleplay",
-            statusCode: 500,
-          },
-        });
-      }
-
-      // Get the updated roleplay
-      const enhancedRoleplay = await prisma.roleplay.findUnique({
-        where: { id: roleplayId },
-      });
-
-      return res.json({
-        success: true,
-        data: {
-          roleplay: {
-            id: enhancedRoleplay!.id,
-            conversationId: enhancedRoleplay!.conversationId,
-            userId: enhancedRoleplay!.userId,
-            name: enhancedRoleplay!.baseRole,
-            description: enhancedRoleplay!.baseRole,
-            systemPrompt: enhancedRoleplay!.enhancedInstructions || "",
-            isActive: enhancedRoleplay!.isActive,
-            createdAt: enhancedRoleplay!.createdAt,
-            updatedAt: enhancedRoleplay!.updatedAt,
-          },
-          message: "Roleplay enhanced successfully",
-        },
-      });
-    } catch (error) {
-      console.error("Error enhancing roleplay:", error);
-      return res.status(500).json({
-        success: false,
-        error: {
-          message: "Failed to enhance roleplay",
-          statusCode: 500,
-        },
-      });
-    }
-  })
-);
-
-// POST /api/chat/conversations/:id/roleplays/enhance-preview - Enhance roleplay based on name and description
-router.post(
-  "/conversations/:id/roleplays/enhance-preview",
-  apiLimiter,
-  validateConversationId,
-  asyncHandler(async (req: Request, res: Response) => {
-    const { id: conversationId } = req.params;
-    const { name, description } = req.body;
-    
-    if (!conversationId) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          message: "Conversation ID is required",
-          statusCode: 400,
-        },
-      });
-    }
-
-    if (!name || !description) {
-      return res.status(400).json({
-        success: false,
-        error: {
-          message: "Name and description are required",
-          statusCode: 400,
-        },
-      });
-    }
-
-    try {
-      // Get conversation context for enhancement
-      const conversation = await prisma.conversation.findUnique({
-        where: { id: conversationId },
-        include: {
-          messages: {
-            orderBy: { createdAt: "desc" },
-            take: 5, // Last 5 messages for context
-          },
-        },
-      });
-
-      if (!conversation) {
-        return res.status(404).json({
-          success: false,
-          error: {
-            message: "Conversation not found",
-            statusCode: 404,
-          },
-        });
-      }
-
-      // Create conversation context from recent messages
-      const conversationContext = conversation.messages
-        .reverse()
-        .map((msg: any) => `${msg.role}: ${msg.content}`)
-        .join('\n');
-
-      // Initialize roleplay service with required dependencies
-      const openai = new (await import("openai")).default({ 
-        apiKey: process.env.OPENAI_API_KEY 
-      });
-      const { UsageTrackingService } = await import("../services/usage-tracking-service");
-      const usageTrackingService = new UsageTrackingService(prisma);
-      const roleplayService = new RoleplayService(prisma, openai, usageTrackingService);
-
-      // Use the private method to enhance the role (we'll need to make it public or create a new method)
-      const enhancement = await (roleplayService as any).analyzeAndEnhanceRole(
-        name,
-        `${description}\n\n${conversationContext}`,
-        null
-      );
-
-      if (!enhancement) {
-        return res.status(500).json({
-          success: false,
-          error: {
-            message: "Failed to enhance roleplay",
-            statusCode: 500,
-          },
-        });
-      }
-
-      // Convert enhancedInstructions to string if it's an object
-      let enhancedSystemPrompt: string;
-      if (typeof enhancement.enhancedInstructions === 'object') {
-        enhancedSystemPrompt = JSON.stringify(enhancement.enhancedInstructions, null, 2);
-      } else {
-        enhancedSystemPrompt = enhancement.enhancedInstructions;
-      }
-
-      return res.json({
-        success: true,
-        data: {
-          enhancedSystemPrompt,
-          confidence: enhancement.confidence,
-        },
-      });
-    } catch (error) {
-      console.error("Error enhancing roleplay preview:", error);
-      return res.status(500).json({
-        success: false,
-        error: {
-          message: "Failed to enhance roleplay",
           statusCode: 500,
         },
       });

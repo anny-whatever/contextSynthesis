@@ -1,7 +1,7 @@
-export { ChatContainer } from './ChatContainer';
-export { ChatMessage } from './ChatMessage';
-export { ChatInput } from './ChatInput';
-export { TokenCounter } from './CostCounter';
-export { ContextSidebar } from './ContextSidebar';
-export { BehavioralMemory } from './BehavioralMemory';
-export { RoleplayManagement } from './RoleplayManagement';
+export { ChatContainer } from "./ChatContainer";
+export { ChatMessage } from "./ChatMessage";
+export { ChatInput } from "./ChatInput";
+export { TokenCounter } from "./CostCounter";
+export { ContextSidebar } from "./ContextSidebar";
+export { BehavioralMemory } from "./BehavioralMemory";
+export { CharacterResearchPanel } from "./CharacterResearchPanel";

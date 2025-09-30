@@ -15,7 +15,6 @@ model User {
   updatedAt     DateTime        @updatedAt
   conversations Conversation[]
   usageTracking UsageTracking[]
-  roleplays     Roleplay[]
 
   @@map("users")
 }
@@ -36,7 +35,6 @@ model Conversation {
   intentAnalyses    IntentAnalysis[]
   messages          Message[]
   usageTracking     UsageTracking[]
-  roleplays         Roleplay[]
   characterKnowledge CharacterKnowledge[]
 
   @@map("conversations")
@@ -187,24 +185,6 @@ enum ToolStatus {
 }
 
 
-
-model Roleplay {
-  id                   String       @id @default(cuid())
-  conversationId       String
-  userId               String?
-  baseRole             String
-  enhancedInstructions String?
-  isActive             Boolean      @default(false)
-  createdAt            DateTime     @default(now())
-  updatedAt            DateTime     @updatedAt
-  conversation         Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  user                 User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([conversationId])
-  @@index([userId])
-  @@index([isActive])
-  @@map("roleplays")
-}
 
 model CharacterKnowledge {
   id              String                 @id @default(cuid())

@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { ChatApiService } from "../../services/chatApi";
 import { BehavioralMemory } from "./BehavioralMemory";
-import { RoleplayManagement } from "./RoleplayManagement";
+import { CharacterResearchPanel } from "./CharacterResearchPanel";
 import type { Summary, IntentAnalysis } from "../../types/chat";
 
 interface ContextSidebarProps {
@@ -171,7 +171,7 @@ export function ContextSidebar({
               className="flex gap-1 items-center text-xs"
             >
               <Theater className="w-3 h-3" />
-              Roleplay
+              Character
             </TabsTrigger>
             <TabsTrigger
               value="intent"
@@ -195,10 +195,8 @@ export function ContextSidebar({
             </ScrollArea>
           </TabsContent>
 
-
-
           <TabsContent value="roleplay" className="mt-0">
-            <RoleplayManagement conversationId={conversationId} />
+            <CharacterResearchPanel conversationId={conversationId} />
           </TabsContent>
 
           <TabsContent value="intent" className="mt-0">

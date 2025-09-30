@@ -1701,17 +1701,18 @@ ${JSON.stringify(context.data, null, 2)}`;
         context.conversationId!
       );
 
-    // Get active roleplay for this conversation
-    const activeRoleplay = await this.roleplayService.getRoleplayForPrompt(
-      context.conversationId!
-    );
-
-    // Get character RAG context if specific character roleplay is active
+    // Get character knowledge if active (for character research mode)
     let characterContext = "";
+    let activeRoleplay = "";
     const characterKnowledge =
       await this.characterKnowledgeService.getActiveCharacterKnowledge(
         context.conversationId!
       );
+
+    // Use character knowledge system prompt as roleplay instructions
+    if (characterKnowledge) {
+      activeRoleplay = `\n\n## Role Instructions\n${characterKnowledge.systemPrompt}\n`;
+    }
 
     if (characterKnowledge) {
       console.log(`🎭 [AGENT] Retrieving character RAG context for query`);
@@ -2393,13 +2394,14 @@ ${behavioralText}
       if (detectedRole) {
         console.log(`🎭 [ROLEPLAY ENHANCEMENT] Detected role: ${detectedRole}`);
 
-        // Check if roleplay already exists for this conversation
-        const existingRoleplay = await this.roleplayService.getActiveRoleplay(
-          conversationId
-        );
+        // Check if character knowledge already exists for this conversation
+        const existingCharacter =
+          await this.characterKnowledgeService.getActiveCharacterKnowledge(
+            conversationId
+          );
 
-        if (!existingRoleplay) {
-          // Create and enhance new roleplay using the conversation context
+        if (!existingCharacter) {
+          // Create and enhance new character research using the conversation context
           const conversationContext = `${userMessage}\n\nAssistant: ${assistantResponse}`;
 
           // Get web search tool for character research
@@ -2414,7 +2416,7 @@ ${behavioralText}
           );
 
           console.log(
-            "🎭 [ROLEPLAY ENHANCEMENT] New roleplay created and enhanced"
+            "🎭 [ROLEPLAY ENHANCEMENT] New character research completed"
           );
         } else {
           console.log(
