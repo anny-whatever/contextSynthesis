@@ -1532,10 +1532,18 @@ router.post(
         });
       }
 
+      // Convert enhancedInstructions to string if it's an object
+      let enhancedSystemPrompt: string;
+      if (typeof enhancement.enhancedInstructions === 'object') {
+        enhancedSystemPrompt = JSON.stringify(enhancement.enhancedInstructions, null, 2);
+      } else {
+        enhancedSystemPrompt = enhancement.enhancedInstructions;
+      }
+
       return res.json({
         success: true,
         data: {
-          enhancedSystemPrompt: enhancement.enhancedInstructions,
+          enhancedSystemPrompt,
           confidence: enhancement.confidence,
         },
       });

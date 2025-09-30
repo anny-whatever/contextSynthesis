@@ -171,6 +171,7 @@ export function RoleplayManagement({ conversationId }: RoleplayManagementProps) 
 
       if (response.success) {
         const enhancedPrompt = response.data.enhancedSystemPrompt;
+        
         // Limit to 250 words
         const words = enhancedPrompt.trim().split(/\s+/);
         const limitedPrompt = words.slice(0, 250).join(' ');
@@ -179,10 +180,12 @@ export function RoleplayManagement({ conversationId }: RoleplayManagementProps) 
           ...formData,
           systemPrompt: limitedPrompt,
         });
+        
         setSuccessMessage("System prompt enhanced successfully!");
+      } else {
+        setError("Failed to enhance roleplay. Please try again.");
       }
     } catch (error) {
-      console.error("Error enhancing roleplay:", error);
       setError("Failed to enhance roleplay. Please try again.");
     } finally {
       setIsEnhancing(false);

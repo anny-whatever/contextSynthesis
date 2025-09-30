@@ -242,14 +242,16 @@ RULES:
 EXISTING MEMORIES:
 ${JSON.stringify(existingMemories, null, 2)}
 
-Return a JSON array of memory extractions. Each extraction should have:
+Return ONLY a valid JSON array of memory extractions. Do NOT wrap the response in markdown code blocks. Each extraction should have:
 {
   "category": "people|places|events|life_events|things",
   "keyValuePairs": {"key1": "value1", "key2": "value2"},
   "confidence": 0.8
 }
 
-If no new memories should be extracted, return an empty array.`;
+If no new memories should be extracted, return an empty array: []
+
+IMPORTANT: Return only the JSON array, no additional text or formatting.`;
 
       const completion = await this.openai.chat.completions.create({
         model: 'gpt-4o-mini',
@@ -276,16 +278,31 @@ If no new memories should be extracted, return an empty array.`;
       if (!content) return [];
 
       try {
-        const extractions = JSON.parse(content) as MemoryExtraction[];
+        const cleanedContent = this.cleanJsonResponse(content);
+        const extractions = JSON.parse(cleanedContent) as MemoryExtraction[];
         return Array.isArray(extractions) ? extractions : [];
       } catch (parseError) {
         console.error('Error parsing memory extraction response:', parseError);
+        console.error('Raw content:', content);
         return [];
       }
     } catch (error) {
       console.error('Error analyzing and extracting memories:', error);
       return [];
     }
+  }
+
+  private cleanJsonResponse(content: string): string {
+    // Remove markdown code block formatting if present
+    const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)\s*```/;
+    const match = content.match(codeBlockRegex);
+    
+    if (match && match[1]) {
+      return match[1].trim();
+    }
+    
+    // Return original content if no code blocks found
+    return content.trim();
   }
 
   private async storeMemories(
