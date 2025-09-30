@@ -104,16 +104,7 @@ export interface TokenData {
   };
 }
 
-export interface Memory {
-  id: string;
-  conversationId: string;
-  userId: string;
-  category: string;
-  keyValuePairs: Record<string, any>;
-  lastUpdated: Date;
-  confidenceScore: number;
-  createdAt: Date;
-}
+
 
 export interface Roleplay {
   id: string;

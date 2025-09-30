@@ -15,7 +15,6 @@ import { UsageTrackingService } from "./usage-tracking-service";
 import { ToolContextService } from "./tool-context-service";
 import { SummarizationQueueService } from "./summarization-queue-service";
 import { BehavioralMemoryService } from "./behavioral-memory-service";
-import { MemoryService } from "./memory-service";
 import { RoleplayService } from "./roleplay-service";
 import {
   AgentConfig,
@@ -55,7 +54,6 @@ export class AgentService {
   private toolContextService: ToolContextService;
   private summarizationQueueService: SummarizationQueueService;
   private behavioralMemoryService: BehavioralMemoryService;
-  private memoryService: MemoryService;
   private roleplayService: RoleplayService;
   private config: AgentConfig;
 
@@ -116,7 +114,6 @@ export class AgentService {
       this.openai,
       this.prisma
     );
-    this.memoryService = new MemoryService(this.prisma, this.openai, this.usageTrackingService);
     this.roleplayService = new RoleplayService(this.prisma, this.openai, this.usageTrackingService);
 
     this.config = {
@@ -1716,10 +1713,7 @@ ${JSON.stringify(context.data, null, 2)}`;
         context.conversationId!
       );
 
-    // Get key-value memories for this conversation
-    const memories = await this.memoryService.getMemoriesForPrompt(
-      context.conversationId!
-    );
+
 
     // Get active roleplay for this conversation
     const activeRoleplay = await this.roleplayService.getRoleplayForPrompt(
@@ -1747,23 +1741,7 @@ ${activeRoleplay}
 ---`;
     }
 
-    // Add memories (factual information about the user)
-    if (memories && memories.trim()) {
-      enhancedSystemPrompt = `${enhancedSystemPrompt}
 
-## CONVERSATION-SPECIFIC MEMORIES
-The following key information has been learned about the user from this conversation. Use this context to personalize responses:
-
-${memories}
-
-**MEMORY USAGE INSTRUCTIONS:**
-- Reference relevant memories naturally in conversation when appropriate
-- Don't explicitly mention that you "remember" something unless asked
-- Use memories to provide more personalized and contextual responses
-- If memories seem outdated or contradictory, ask for clarification
-
----`;
-    }
 
     // Add behavioral preferences (communication style)
     if (behavioralMemory && Object.keys(behavioralMemory).length > 0) {
@@ -2364,11 +2342,10 @@ ${behavioralText}
     // Start all memory processing tasks asynchronously
     Promise.allSettled([
       this.updateBehavioralMemoryAsync(context.conversationId!, userMessage),
-      this.extractMemoriesAsync(context.conversationId!, userMessage, assistantResponse, context.userId),
       this.enhanceRoleplayAsync(context.conversationId!, userMessage, assistantResponse, context.userId)
     ]).then((results) => {
       results.forEach((result, index) => {
-        const taskNames = ['Behavioral Memory', 'Memory Extraction', 'Roleplay Enhancement'];
+        const taskNames = ['Behavioral Memory', 'Roleplay Enhancement'];
         if (result.status === 'rejected') {
           console.error(`❌ [${taskNames[index]}] Background processing failed:`, result.reason);
         } else {
@@ -2378,33 +2355,7 @@ ${behavioralText}
     });
   }
 
-  /**
-   * Automatically extracts structured memories from user messages
-   */
-  private async extractMemoriesAsync(
-    conversationId: string,
-    userMessage: string,
-    assistantResponse: string,
-    userId?: string
-  ): Promise<void> {
-    try {
-      console.log("🧠 [MEMORY EXTRACTION] Starting automatic memory extraction");
 
-      await this.memoryService.extractAndStoreMemories(
-        conversationId,
-        userId || null,
-        userMessage,
-        assistantResponse
-      );
-
-      console.log("🧠 [MEMORY EXTRACTION] Automatic extraction completed successfully");
-    } catch (error) {
-      console.error(
-        "🧠 [MEMORY EXTRACTION] Automatic extraction failed:",
-        error instanceof Error ? error.message : "Unknown error"
-      );
-    }
-  }
 
   /**
    * Automatically detects roleplay mentions and enhances them

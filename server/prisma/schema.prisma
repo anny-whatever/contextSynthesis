@@ -15,7 +15,6 @@ model User {
   updatedAt     DateTime        @updatedAt
   conversations Conversation[]
   usageTracking UsageTracking[]
-  memories      Memory[]
   roleplays     Roleplay[]
 
   @@map("users")
@@ -37,7 +36,6 @@ model Conversation {
   intentAnalyses    IntentAnalysis[]
   messages          Message[]
   usageTracking     UsageTracking[]
-  memories          Memory[]
   roleplays         Roleplay[]
 
   @@map("conversations")
@@ -187,23 +185,7 @@ enum ToolStatus {
   FAILED
 }
 
-model Memory {
-  id              String       @id @default(cuid())
-  conversationId  String
-  userId          String?
-  category        String       // 'people', 'places', 'events', 'life_events', 'things'
-  keyValuePairs   Json         // Key-value pairs for this category
-  lastUpdated     DateTime     @default(now())
-  confidenceScore Float?       @default(1.0)
-  createdAt       DateTime     @default(now())
-  conversation    Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  user            User?        @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([conversationId, category])
-  @@index([userId, category])
-  @@index([category])
-  @@map("memories")
-}
 
 model Roleplay {
   id                   String       @id @default(cuid())
@@ -231,6 +213,5 @@ enum UsageOperationType {
   TOOL_CALL
   EMBEDDING_GENERATION
   BEHAVIORAL_MEMORY
-  MEMORY_EXTRACTION
   ROLEPLAY_ENHANCEMENT
 }

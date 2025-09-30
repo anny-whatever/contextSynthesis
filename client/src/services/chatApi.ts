@@ -6,7 +6,6 @@ import type {
   Summary,
   IntentAnalysis,
   TokenData,
-  Memory,
   Roleplay,
 } from "../types/chat";
 
@@ -356,42 +355,11 @@ export class ChatApiService {
   }
 
   // Memory API methods
-  static async getMemories(conversationId: string): Promise<{
-    success: boolean;
-    data: { memories: Memory[] };
-  }> {
-    return this.request(`/chat/conversations/${conversationId}/memories`);
-  }
 
-  static async updateMemory(
-    conversationId: string,
-    category: string,
-    keyValuePairs: Record<string, any>
-  ): Promise<{
-    success: boolean;
-    data: { memory: Memory; message: string };
-  }> {
-    return this.request(`/chat/conversations/${conversationId}/memories/${category}`, {
-      method: "PUT",
-      body: JSON.stringify({ keyValuePairs }),
-    });
-  }
 
-  static async deleteMemory(
-    conversationId: string,
-    category: string,
-    key: string
-  ): Promise<{
-    success: boolean;
-    message: string;
-  }> {
-    return this.request(
-      `/chat/conversations/${conversationId}/memories/${category}/${key}`,
-      {
-        method: "DELETE",
-      }
-    );
-  }
+
+
+
 
   // Roleplay API methods
   static async getRoleplays(conversationId: string): Promise<{

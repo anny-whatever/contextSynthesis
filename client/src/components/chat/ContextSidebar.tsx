@@ -17,7 +17,6 @@ import {
 } from "lucide-react";
 import { ChatApiService } from "../../services/chatApi";
 import { BehavioralMemory } from "./BehavioralMemory";
-import { MemoryManagement } from "./MemoryManagement";
 import { RoleplayManagement } from "./RoleplayManagement";
 import type { Summary, IntentAnalysis } from "../../types/chat";
 
@@ -159,20 +158,13 @@ export function ContextSidebar({
         )}
 
         <Tabs defaultValue="behavioral" className="h-full">
-          <TabsList className="grid grid-cols-5 mx-2">
+          <TabsList className="grid grid-cols-4 mx-2">
             <TabsTrigger
               value="behavioral"
               className="flex gap-1 items-center text-xs"
             >
               <User className="w-3 h-3" />
               Behavioral
-            </TabsTrigger>
-            <TabsTrigger
-              value="memories"
-              className="flex gap-1 items-center text-xs"
-            >
-              <Database className="w-3 h-3" />
-              Memories
             </TabsTrigger>
             <TabsTrigger
               value="roleplay"
@@ -203,9 +195,7 @@ export function ContextSidebar({
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="memories" className="mt-0">
-            <MemoryManagement conversationId={conversationId} />
-          </TabsContent>
+
 
           <TabsContent value="roleplay" className="mt-0">
             <RoleplayManagement conversationId={conversationId} />
