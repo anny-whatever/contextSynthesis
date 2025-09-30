@@ -238,10 +238,10 @@ export function CharacterResearchPanel({
   return (
     <div className="flex flex-col h-full">
       {/* Header Section */}
-      <div className="flex-shrink-0 p-4 border-b">
-        <div className="flex justify-between items-center mb-3">
-          <div className="flex items-center gap-3">
-            <div className="p-2 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg">
+      <div className="flex-shrink-0">
+        <div className="flex justify-between items-center">
+          <div className="flex gap-3 items-center">
+            {/* <div className="p-2 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg">
               <Sparkles className="w-4 h-4 text-white" />
             </div>
             <div>
@@ -249,7 +249,7 @@ export function CharacterResearchPanel({
               <p className="text-xs text-muted-foreground">
                 AI-powered character knowledge
               </p>
-            </div>
+            </div> */}
           </div>
           {!characterKnowledge && (
             <Button
@@ -267,7 +267,7 @@ export function CharacterResearchPanel({
         {successMessage && (
           <Alert className="mb-3 bg-green-50 border-green-200 dark:bg-green-950/20">
             <CheckCircle className="w-4 h-4 text-green-600" />
-            <AlertDescription className="text-green-800 dark:text-green-200 text-sm">
+            <AlertDescription className="text-sm text-green-800 dark:text-green-200">
               {successMessage}
             </AlertDescription>
           </Alert>
@@ -282,7 +282,7 @@ export function CharacterResearchPanel({
       </div>
 
       {/* Content Section */}
-      <div className="flex-1 overflow-auto p-4">
+      <div className="overflow-auto flex-1 p-4">
         {/* Loading State */}
         {isLoading && (
           <Card>
@@ -298,11 +298,11 @@ export function CharacterResearchPanel({
         {!isLoading && !characterKnowledge && (
           <Card className="border-dashed">
             <CardContent className="py-12 text-center">
-              <div className="inline-flex p-3 mb-3 bg-gradient-to-br from-purple-100 to-indigo-100 dark:from-purple-900/20 dark:to-indigo-900/20 rounded-full">
+              <div className="inline-flex p-3 mb-3 bg-gradient-to-br from-purple-100 to-indigo-100 rounded-full dark:from-purple-900/20 dark:to-indigo-900/20">
                 <Search className="w-6 h-6 text-purple-600 dark:text-purple-400" />
               </div>
               <h3 className="mb-2 text-lg font-semibold">No Character Yet</h3>
-              <p className="mb-4 text-sm text-muted-foreground max-w-sm mx-auto">
+              <p className="mx-auto mb-4 max-w-sm text-sm text-muted-foreground">
                 Research a character to unlock AI-powered knowledge including
                 personality, relationships, and more
               </p>
@@ -322,12 +322,12 @@ export function CharacterResearchPanel({
           <Card className="border-purple-200 dark:border-purple-800">
             <CardHeader className="pb-3">
               <div className="flex justify-between items-start">
-                <div className="flex items-start gap-3">
+                <div className="flex gap-3 items-start">
                   <div className="p-2 bg-gradient-to-br from-purple-500 to-indigo-600 rounded-lg">
                     <User className="w-5 h-5 text-white" />
                   </div>
                   <div>
-                    <CardTitle className="text-xl mb-1">
+                    <CardTitle className="mb-1 text-xl">
                       {characterKnowledge.characterName}
                     </CardTitle>
                     <Badge variant="secondary" className="text-xs">
@@ -382,7 +382,7 @@ export function CharacterResearchPanel({
 
               {/* Quick Stats */}
               <div className="grid grid-cols-3 gap-3 text-center">
-                <div className="p-2 bg-muted/50 rounded-lg">
+                <div className="p-2 rounded-lg bg-muted/50">
                   <p className="text-lg font-bold text-blue-600">
                     {
                       characterKnowledge.knowledgeGraph.attributes.catchphrases
@@ -391,7 +391,7 @@ export function CharacterResearchPanel({
                   </p>
                   <p className="text-xs text-muted-foreground">Catchphrases</p>
                 </div>
-                <div className="p-2 bg-muted/50 rounded-lg">
+                <div className="p-2 rounded-lg bg-muted/50">
                   <p className="text-lg font-bold text-pink-600">
                     {
                       characterKnowledge.knowledgeGraph.attributes.relationships
@@ -400,7 +400,7 @@ export function CharacterResearchPanel({
                   </p>
                   <p className="text-xs text-muted-foreground">Relationships</p>
                 </div>
-                <div className="p-2 bg-muted/50 rounded-lg">
+                <div className="p-2 rounded-lg bg-muted/50">
                   <p className="text-lg font-bold text-green-600">
                     {characterKnowledge.chunks.length}
                   </p>
@@ -427,9 +427,10 @@ export function CharacterResearchPanel({
               </div>
 
               {/* Created Date */}
-              <div className="flex items-center gap-1 text-xs text-muted-foreground pt-1 border-t">
+              <div className="flex gap-1 items-center pt-1 text-xs border-t text-muted-foreground">
                 <Calendar className="w-3 h-3" />
-                Created {new Date(characterKnowledge.createdAt).toLocaleDateString()}
+                Created{" "}
+                {new Date(characterKnowledge.createdAt).toLocaleDateString()}
               </div>
             </CardContent>
           </Card>
@@ -440,7 +441,7 @@ export function CharacterResearchPanel({
       <Dialog open={isCreateDialogOpen} onOpenChange={setIsCreateDialogOpen}>
         <DialogContent className="sm:max-w-[450px]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex gap-2 items-center">
               <Search className="w-5 h-5 text-purple-600" />
               Research Character
             </DialogTitle>
@@ -450,7 +451,7 @@ export function CharacterResearchPanel({
             </DialogDescription>
           </DialogHeader>
 
-          <div className="space-y-4 py-4">
+          <div className="py-4 space-y-4">
             <div>
               <Label htmlFor="characterName" className="text-sm font-medium">
                 Character Name *
@@ -506,12 +507,12 @@ export function CharacterResearchPanel({
             >
               {isResearching ? (
                 <>
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2" />
+                  <div className="mr-2 w-4 h-4 rounded-full border-b-2 border-white animate-spin" />
                   Researching...
                 </>
               ) : (
                 <>
-                  <Search className="w-4 h-4 mr-2" />
+                  <Search className="mr-2 w-4 h-4" />
                   Research Character
                 </>
               )}
@@ -524,7 +525,7 @@ export function CharacterResearchPanel({
       <Dialog open={isDetailsModalOpen} onOpenChange={setIsDetailsModalOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
+            <DialogTitle className="flex gap-2 items-center">
               <User className="w-5 h-5 text-purple-600" />
               {characterKnowledge?.characterName} - Character Details
             </DialogTitle>
@@ -561,13 +562,17 @@ export function CharacterResearchPanel({
                         </Badge>
                       </div>
 
-                      {characterKnowledge.knowledgeGraph.basicInfo.occupation && (
+                      {characterKnowledge.knowledgeGraph.basicInfo
+                        .occupation && (
                         <div>
                           <p className="mb-1 text-sm font-medium text-muted-foreground">
                             Occupation
                           </p>
                           <p className="text-sm">
-                            {characterKnowledge.knowledgeGraph.basicInfo.occupation}
+                            {
+                              characterKnowledge.knowledgeGraph.basicInfo
+                                .occupation
+                            }
                           </p>
                         </div>
                       )}
@@ -614,7 +619,10 @@ export function CharacterResearchPanel({
                           Communication Style
                         </p>
                         <p className="text-sm">
-                          {characterKnowledge.knowledgeGraph.attributes.traits.communication}
+                          {
+                            characterKnowledge.knowledgeGraph.attributes.traits
+                              .communication
+                          }
                         </p>
                       </div>
                       <Separator />
@@ -623,7 +631,10 @@ export function CharacterResearchPanel({
                           Expertise
                         </p>
                         <p className="text-sm">
-                          {characterKnowledge.knowledgeGraph.attributes.traits.expertise}
+                          {
+                            characterKnowledge.knowledgeGraph.attributes.traits
+                              .expertise
+                          }
                         </p>
                       </div>
                       <Separator />
@@ -632,14 +643,18 @@ export function CharacterResearchPanel({
                           Quirks
                         </p>
                         <p className="text-sm">
-                          {characterKnowledge.knowledgeGraph.attributes.traits.quirks}
+                          {
+                            characterKnowledge.knowledgeGraph.attributes.traits
+                              .quirks
+                          }
                         </p>
                       </div>
                     </CardContent>
                   </Card>
 
                   {/* Catchphrases */}
-                  {characterKnowledge.knowledgeGraph.attributes.catchphrases.length > 0 && (
+                  {characterKnowledge.knowledgeGraph.attributes.catchphrases
+                    .length > 0 && (
                     <Card>
                       <CardHeader>
                         <CardTitle className="flex gap-2 items-center">
@@ -653,7 +668,7 @@ export function CharacterResearchPanel({
                             (phrase, idx) => (
                               <div
                                 key={idx}
-                                className="p-3 bg-blue-50 dark:bg-blue-950/20 rounded-lg border border-blue-100 dark:border-blue-900"
+                                className="p-3 bg-blue-50 rounded-lg border border-blue-100 dark:bg-blue-950/20 dark:border-blue-900"
                               >
                                 <p className="text-sm italic">"{phrase}"</p>
                               </div>
@@ -665,7 +680,8 @@ export function CharacterResearchPanel({
                   )}
 
                   {/* Relationships */}
-                  {characterKnowledge.knowledgeGraph.attributes.relationships.length > 0 && (
+                  {characterKnowledge.knowledgeGraph.attributes.relationships
+                    .length > 0 && (
                     <Card>
                       <CardHeader>
                         <CardTitle className="flex gap-2 items-center">
@@ -676,9 +692,14 @@ export function CharacterResearchPanel({
                       <CardContent className="space-y-3">
                         {characterKnowledge.knowledgeGraph.attributes.relationships.map(
                           (rel, idx) => (
-                            <div key={idx} className="pl-3 border-l-2 border-pink-500">
+                            <div
+                              key={idx}
+                              className="pl-3 border-l-2 border-pink-500"
+                            >
                               <p className="text-sm font-medium">{rel.name}</p>
-                              <p className="text-xs text-muted-foreground">{rel.type}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {rel.type}
+                              </p>
                               <p className="mt-1 text-sm">{rel.dynamic}</p>
                             </div>
                           )
@@ -720,8 +741,14 @@ export function CharacterResearchPanel({
                         </div>
                       </CardHeader>
                       <CardContent>
-                        <div className={`p-3 rounded-lg border ${getChunkTypeColor(chunk.chunkType)}`}>
-                          <p className="text-sm leading-relaxed">{chunk.content}</p>
+                        <div
+                          className={`p-3 rounded-lg border ${getChunkTypeColor(
+                            chunk.chunkType
+                          )}`}
+                        >
+                          <p className="text-sm leading-relaxed">
+                            {chunk.content}
+                          </p>
                         </div>
                       </CardContent>
                     </Card>
