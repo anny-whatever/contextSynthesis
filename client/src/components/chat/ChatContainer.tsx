@@ -24,7 +24,6 @@ import { ChatMessage } from "./ChatMessage";
 import { ChatInput } from "./ChatInput";
 import { TokenCounter } from "./CostCounter";
 import { ContextSidebar } from "./ContextSidebar";
-import { CharacterKnowledgeModal } from "./CharacterKnowledgeModal";
 import { ChatApiService } from "../../services/chatApi";
 import type { StreamingEvent, StreamingOptions } from "../../services/chatApi";
 import { usePingMechanism } from "../../hooks/usePingMechanism";
@@ -44,7 +43,6 @@ export function ChatContainer() {
   const [currentStreamMessage, setCurrentStreamMessage] = useState<string>("");
   const [useStreaming, setUseStreaming] = useState(true); // Toggle for streaming vs regular
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isCharacterModalOpen, setIsCharacterModalOpen] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const userId = "anonymous";
 
@@ -345,26 +343,15 @@ export function ChatContainer() {
               </Button>
 
               <Button
+                variant="outline"
+                size="sm"
                 onClick={createNewConversation}
                 disabled={isLoading}
-                size="sm"
+                className="flex items-center gap-2"
               >
                 <Plus className="mr-2 w-4 h-4" />
                 New Chat
               </Button>
-
-              {/* Character Knowledge Button */}
-              {conversation && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsCharacterModalOpen(true)}
-                  className="flex items-center gap-2"
-                >
-                  <Brain className="w-4 h-4" />
-                  <span className="hidden sm:inline">Character</span>
-                </Button>
-              )}
 
               <Dialog open={isModalOpen} onOpenChange={setIsModalOpen}>
                 <DialogTrigger asChild>
@@ -535,13 +522,6 @@ export function ChatContainer() {
           pingError={pingMechanism.error}
         />
       </div>
-
-      {/* Character Knowledge Modal */}
-      <CharacterKnowledgeModal
-        conversationId={conversation?.id || null}
-        isOpen={isCharacterModalOpen}
-        onClose={() => setIsCharacterModalOpen(false)}
-      />
     </div>
   );
 }
