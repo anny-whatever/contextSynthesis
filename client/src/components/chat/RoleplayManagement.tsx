@@ -17,6 +17,7 @@ import {
 } from "../ui/dialog";
 import { Label } from "../ui/label";
 import { ScrollArea } from "../ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import {
   AlertCircle,
   Plus,
@@ -29,6 +30,9 @@ import {
   Sparkles,
   CheckCircle2,
   XCircle,
+  Brain,
+  Search,
+  Globe,
 } from "lucide-react";
 import { ChatApiService } from "../../services/chatApi";
 import type { Roleplay } from "../../types/chat";
@@ -37,7 +41,9 @@ interface RoleplayManagementProps {
   conversationId: string | null;
 }
 
-export function RoleplayManagement({ conversationId }: RoleplayManagementProps) {
+export function RoleplayManagement({
+  conversationId,
+}: RoleplayManagementProps) {
   const [roleplays, setRoleplays] = useState<Roleplay[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,20 +51,33 @@ export function RoleplayManagement({ conversationId }: RoleplayManagementProps) 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingRoleplay, setEditingRoleplay] = useState<Roleplay | null>(null);
   const [isEnhancing, setIsEnhancing] = useState(false);
+  const [isResearching, setIsResearching] = useState(false);
+  const [roleplayType, setRoleplayType] = useState<"generic" | "character">(
+    "generic"
+  );
+
   const [formData, setFormData] = useState({
     name: "",
     description: "",
     systemPrompt: "",
     isActive: false,
+    characterName: "",
+    characterSource: "",
   });
 
   // Helper function to count words
   const countWords = (text: string): number => {
-    return text.trim().split(/\s+/).filter(word => word.length > 0).length;
+    return text
+      .trim()
+      .split(/\s+/)
+      .filter((word) => word.length > 0).length;
   };
 
   // Check if enhancement can be enabled
-  const canEnhance = formData.name.trim() !== "" && formData.description.trim() !== "";
+  const canEnhance =
+    formData.name.trim() !== "" && formData.description.trim() !== "";
+  const canResearch =
+    roleplayType === "character" && formData.characterName.trim() !== "";
 
   useEffect(() => {
     if (conversationId) {
@@ -98,24 +117,92 @@ export function RoleplayManagement({ conversationId }: RoleplayManagementProps) 
 
   const openCreateDialog = () => {
     setEditingRoleplay(null);
+    setRoleplayType("generic");
     setFormData({
       name: "",
       description: "",
       systemPrompt: "",
       isActive: false,
+      characterName: "",
+      characterSource: "",
     });
     setIsDialogOpen(true);
   };
 
   const openEditDialog = (roleplay: Roleplay) => {
     setEditingRoleplay(roleplay);
+    setRoleplayType("generic"); // Editing only for generic for now
     setFormData({
       name: roleplay.name,
       description: roleplay.description || "",
       systemPrompt: roleplay.systemPrompt || "",
       isActive: roleplay.isActive,
+      characterName: "",
+      characterSource: "",
     });
     setIsDialogOpen(true);
+  };
+
+  const handleResearchCharacter = async () => {
+    if (!conversationId || !canResearch) return;
+
+    setIsResearching(true);
+    setError(null);
+
+    try {
+      // Call the character research API
+      const response = await fetch(
+        `/api/character/${conversationId}/research`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            characterName: formData.characterName.trim(),
+            characterSource: formData.characterSource.trim() || undefined,
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        setSuccessMessage(
+          `Character "${formData.characterName}" researched successfully! Knowledge graph created with ${data.data.chunkCount} chunks.`
+        );
+
+        // Populate form with character data
+        setFormData({
+          ...formData,
+          name: data.data.characterName,
+          description: `Character roleplay: ${data.data.characterName}${
+            data.data.characterSource
+              ? ` from ${data.data.characterSource}`
+              : ""
+          }`,
+          systemPrompt: data.data.systemPrompt,
+        });
+
+        // Close dialog and reload roleplays
+        setTimeout(() => {
+          setIsDialogOpen(false);
+          loadRoleplays();
+        }, 1500);
+      } else {
+        setError(
+          data.error ||
+            "Failed to research character. Please check the name and try again."
+        );
+      }
+    } catch (error) {
+      console.error("Character research error:", error);
+      setError(
+        "Failed to research character. Please ensure the character name is searchable."
+      );
+    } finally {
+      setIsResearching(false);
+    }
   };
 
   const handleSaveRoleplay = async () => {
@@ -143,7 +230,9 @@ export function RoleplayManagement({ conversationId }: RoleplayManagementProps) 
 
       if (response.success) {
         setSuccessMessage(
-          editingRoleplay ? "Roleplay updated successfully" : "Roleplay created successfully"
+          editingRoleplay
+            ? "Roleplay updated successfully"
+            : "Roleplay created successfully"
         );
         setIsDialogOpen(false);
         await loadRoleplays();
@@ -164,23 +253,26 @@ export function RoleplayManagement({ conversationId }: RoleplayManagementProps) 
     setError(null);
 
     try {
-      const response = await ChatApiService.enhanceRoleplayPreview(conversationId, {
-        name: formData.name,
-        description: formData.description,
-      });
+      const response = await ChatApiService.enhanceRoleplayPreview(
+        conversationId,
+        {
+          name: formData.name,
+          description: formData.description,
+        }
+      );
 
       if (response.success) {
         const enhancedPrompt = response.data.enhancedSystemPrompt;
-        
+
         // Limit to 250 words
         const words = enhancedPrompt.trim().split(/\s+/);
-        const limitedPrompt = words.slice(0, 250).join(' ');
-        
+        const limitedPrompt = words.slice(0, 250).join(" ");
+
         setFormData({
           ...formData,
           systemPrompt: limitedPrompt,
         });
-        
+
         setSuccessMessage("System prompt enhanced successfully!");
       } else {
         setError("Failed to enhance roleplay. Please try again.");
@@ -191,8 +283,6 @@ export function RoleplayManagement({ conversationId }: RoleplayManagementProps) 
       setIsEnhancing(false);
     }
   };
-
-
 
   const handleToggleActive = async (roleplay: Roleplay) => {
     if (!conversationId) return;
@@ -220,10 +310,17 @@ export function RoleplayManagement({ conversationId }: RoleplayManagementProps) 
   };
 
   const handleDeleteRoleplay = async (roleplayId: string) => {
-    if (!conversationId || !confirm("Are you sure you want to delete this roleplay?")) return;
+    if (
+      !conversationId ||
+      !confirm("Are you sure you want to delete this roleplay?")
+    )
+      return;
 
     try {
-      const response = await ChatApiService.deleteRoleplay(conversationId, roleplayId);
+      const response = await ChatApiService.deleteRoleplay(
+        conversationId,
+        roleplayId
+      );
       if (response.success) {
         setSuccessMessage("Roleplay deleted successfully");
         await loadRoleplays();
@@ -231,7 +328,9 @@ export function RoleplayManagement({ conversationId }: RoleplayManagementProps) 
         setError("Failed to delete roleplay");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to delete roleplay");
+      setError(
+        err instanceof Error ? err.message : "Failed to delete roleplay"
+      );
     }
   };
 
@@ -239,7 +338,7 @@ export function RoleplayManagement({ conversationId }: RoleplayManagementProps) 
     return (
       <div className="p-4">
         <div className="py-8 text-center text-muted-foreground">
-          <Theater className="w-8 h-8 mx-auto mb-2 opacity-50" />
+          <Theater className="mx-auto mb-2 w-8 h-8 opacity-50" />
           <p>Select a conversation to manage roleplays</p>
         </div>
       </div>
@@ -260,108 +359,289 @@ export function RoleplayManagement({ conversationId }: RoleplayManagementProps) 
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button size="sm" onClick={openCreateDialog}>
-              <Plus className="w-3 h-3 mr-1" />
+              <Plus className="mr-1 w-3 h-3" />
               Add Roleplay
             </Button>
           </DialogTrigger>
-          <DialogContent className="max-w-2xl">
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>
                 {editingRoleplay ? "Edit Roleplay" : "Create New Roleplay"}
               </DialogTitle>
               <DialogDescription>
                 {editingRoleplay
-                  ? "Update the roleplay configuration and enhance it with AI."
-                  : "Create a new roleplay scenario for the AI to follow."}
+                  ? "Update the roleplay configuration."
+                  : "Create a roleplay - choose a specific character or generic role."}
               </DialogDescription>
             </DialogHeader>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="name">Name</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
-                  onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
-                  }
-                  placeholder="e.g., Helpful Assistant, Creative Writer"
-                />
-              </div>
-              <div>
-                <Label htmlFor="description">Description</Label>
-                <Input
-                  id="description"
-                  value={formData.description}
-                  onChange={(e) =>
-                    setFormData({ ...formData, description: e.target.value })
-                  }
-                  placeholder="Brief description of the roleplay"
-                />
-              </div>
-              <div>
-                <div className="flex justify-between items-center mb-2">
-                  <Label htmlFor="systemPrompt">System Prompt</Label>
-                  <div className="flex items-center gap-2">
-                    <span className={`text-xs ${countWords(formData.systemPrompt) > 250 ? 'text-red-500' : 'text-muted-foreground'}`}>
+
+            {!editingRoleplay && (
+              <Tabs
+                value={roleplayType}
+                onValueChange={(value) =>
+                  setRoleplayType(value as "generic" | "character")
+                }
+              >
+                <TabsList className="grid grid-cols-2 w-full">
+                  <TabsTrigger value="generic">
+                    <Sparkles className="mr-2 w-4 h-4" />
+                    Generic Role
+                  </TabsTrigger>
+                  <TabsTrigger value="character">
+                    <Brain className="mr-2 w-4 h-4" />
+                    Specific Character
+                  </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="generic" className="mt-4 space-y-4">
+                  {/* <Alert>
+                    <AlertCircle className="w-4 h-4" />
+                    <AlertDescription>
+                      Create a generic roleplay persona (e.g., "Helpful
+                      Assistant", "Creative Writer")
+                    </AlertDescription>
+                  </Alert> */}
+                  <div>
+                    <Label htmlFor="name">Role Name</Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
+                      placeholder="e.g., Helpful Assistant, Creative Writer"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="description">Description</Label>
+                    <Input
+                      id="description"
+                      value={formData.description}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          description: e.target.value,
+                        })
+                      }
+                      placeholder="Brief description of the roleplay"
+                    />
+                  </div>
+                  <div>
+                    <div className="flex justify-between items-center mb-2">
+                      <Label htmlFor="systemPrompt">System Prompt</Label>
+                      <div className="flex gap-2 items-center">
+                        <span
+                          className={`text-xs ${
+                            countWords(formData.systemPrompt) > 250
+                              ? "text-red-500"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {countWords(formData.systemPrompt)}/250 words
+                        </span>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={handleEnhanceRoleplay}
+                          disabled={!canEnhance || isEnhancing}
+                          className="text-xs"
+                        >
+                          {isEnhancing ? (
+                            <>
+                              <div className="mr-1 w-3 h-3 rounded-full border-2 border-current animate-spin border-t-transparent" />
+                              Enhancing...
+                            </>
+                          ) : (
+                            <>
+                              <Sparkles className="mr-1 w-3 h-3" />
+                              Enhance with AI
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                    <Textarea
+                      id="systemPrompt"
+                      value={formData.systemPrompt}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          systemPrompt: e.target.value,
+                        })
+                      }
+                      placeholder="Detailed instructions for the AI to follow this role..."
+                      rows={6}
+                    />
+                    {countWords(formData.systemPrompt) > 250 && (
+                      <p className="mt-1 text-xs text-red-500">
+                        System prompt exceeds 250 word limit. Please shorten it.
+                      </p>
+                    )}
+                  </div>
+                </TabsContent>
+
+                <TabsContent value="character" className="mt-4 space-y-4">
+                  <Alert className="bg-purple-50 border-purple-200">
+                    <Brain className="w-4 h-4 text-purple-600" />
+                    <AlertDescription className="text-purple-900">
+                      <strong>Character Research System</strong>
+                      <br />
+                      Enter any character name (real or fictional). The system
+                      will automatically research them, build a knowledge graph,
+                      and create an authentic roleplay.
+                    </AlertDescription>
+                  </Alert>
+
+                  <div>
+                    <Label htmlFor="characterName">
+                      Character Name <span className="text-red-500">*</span>
+                    </Label>
+                    <Input
+                      id="characterName"
+                      value={formData.characterName}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          characterName: e.target.value,
+                        })
+                      }
+                      placeholder="e.g., Albert Einstein, Sherlock Holmes, Donna Paulsen"
+                    />
+                  </div>
+
+                  <div>
+                    <Label htmlFor="characterSource">
+                      Source (optional but recommended)
+                    </Label>
+                    <Input
+                      id="characterSource"
+                      value={formData.characterSource}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          characterSource: e.target.value,
+                        })
+                      }
+                      placeholder="e.g., Suits, BBC Sherlock, Naruto, Real Person"
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Helps disambiguate characters with same name
+                    </p>
+                  </div>
+
+                  <Button
+                    onClick={handleResearchCharacter}
+                    disabled={!canResearch || isResearching}
+                    className="w-full"
+                    size="lg"
+                  >
+                    {isResearching ? (
+                      <>
+                        <div className="mr-2 w-4 h-4 rounded-full border-2 border-current animate-spin border-t-transparent" />
+                        Researching Character (10-15s)...
+                      </>
+                    ) : (
+                      <>
+                        <Globe className="mr-2 w-4 h-4" />
+                        <Search className="mr-2 w-4 h-4" />
+                        Research & Create Character
+                      </>
+                    )}
+                  </Button>
+
+                  {formData.systemPrompt && (
+                    <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                      <div className="flex gap-2 items-center mb-2">
+                        <CheckCircle2 className="w-4 h-4 text-green-600" />
+                        <span className="text-sm font-medium text-green-900">
+                          Character Research Complete!
+                        </span>
+                      </div>
+                      <div className="p-2 text-xs text-green-800 bg-white rounded">
+                        <strong>Generated System Prompt:</strong>
+                        <div className="overflow-y-auto mt-1 max-h-32">
+                          {formData.systemPrompt}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </TabsContent>
+              </Tabs>
+            )}
+
+            {editingRoleplay && (
+              <div className="space-y-4">
+                <div>
+                  <Label htmlFor="name">Role Name</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) =>
+                      setFormData({ ...formData, name: e.target.value })
+                    }
+                    placeholder="e.g., Helpful Assistant, Creative Writer"
+                  />
+                </div>
+                <div>
+                  <Label htmlFor="description">Description</Label>
+                  <Input
+                    id="description"
+                    value={formData.description}
+                    onChange={(e) =>
+                      setFormData({ ...formData, description: e.target.value })
+                    }
+                    placeholder="Brief description of the roleplay"
+                  />
+                </div>
+                <div>
+                  <div className="flex justify-between items-center mb-2">
+                    <Label htmlFor="systemPrompt">System Prompt</Label>
+                    <span
+                      className={`text-xs ${
+                        countWords(formData.systemPrompt) > 250
+                          ? "text-red-500"
+                          : "text-muted-foreground"
+                      }`}
+                    >
                       {countWords(formData.systemPrompt)}/250 words
                     </span>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={handleEnhanceRoleplay}
-                      disabled={!canEnhance || isEnhancing}
-                      className="text-xs"
-                    >
-                      {isEnhancing ? (
-                        <>
-                          <div className="w-3 h-3 mr-1 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                          Enhancing...
-                        </>
-                      ) : (
-                        <>
-                          <Sparkles className="w-3 h-3 mr-1" />
-                          Enhance with AI
-                        </>
-                      )}
-                    </Button>
                   </div>
+                  <Textarea
+                    id="systemPrompt"
+                    value={formData.systemPrompt}
+                    onChange={(e) =>
+                      setFormData({ ...formData, systemPrompt: e.target.value })
+                    }
+                    placeholder="Detailed instructions for the AI to follow this role..."
+                    rows={6}
+                  />
                 </div>
-                <Textarea
-                  id="systemPrompt"
-                  value={formData.systemPrompt}
-                  onChange={(e) =>
-                    setFormData({ ...formData, systemPrompt: e.target.value })
-                  }
-                  placeholder="Detailed instructions for the AI to follow this role..."
-                  rows={6}
-                />
-                {countWords(formData.systemPrompt) > 250 && (
-                  <p className="text-xs text-red-500 mt-1">
-                    System prompt exceeds 250 word limit. Please shorten it.
-                  </p>
-                )}
               </div>
-              <div className="flex items-center space-x-2">
-                <input
-                  type="checkbox"
-                  id="isActive"
-                  checked={formData.isActive}
-                  onChange={(e) =>
-                    setFormData({ ...formData, isActive: e.target.checked })
-                  }
-                  className="rounded"
-                />
-                <Label htmlFor="isActive">Set as active roleplay</Label>
-              </div>
+            )}
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="isActive"
+                checked={formData.isActive}
+                onChange={(e) =>
+                  setFormData({ ...formData, isActive: e.target.checked })
+                }
+                className="rounded"
+              />
+              <Label htmlFor="isActive">Set as active roleplay</Label>
             </div>
+
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                 Cancel
               </Button>
-              <Button onClick={handleSaveRoleplay} disabled={isLoading}>
-                <Save className="w-3 h-3 mr-1" />
-                {editingRoleplay ? "Update" : "Create"} Roleplay
-              </Button>
+              {roleplayType === "generic" && (
+                <Button onClick={handleSaveRoleplay} disabled={isLoading}>
+                  <Save className="mr-1 w-3 h-3" />
+                  {editingRoleplay ? "Update" : "Create"} Roleplay
+                </Button>
+              )}
             </DialogFooter>
           </DialogContent>
         </Dialog>
@@ -376,8 +656,8 @@ export function RoleplayManagement({ conversationId }: RoleplayManagementProps) 
       )}
 
       {successMessage && (
-        <Alert className="border-green-200 bg-green-50">
-          <AlertCircle className="w-4 h-4 text-green-600" />
+        <Alert className="bg-green-50 border-green-200">
+          <CheckCircle2 className="w-4 h-4 text-green-600" />
           <AlertDescription className="text-green-700">
             {successMessage}
           </AlertDescription>
@@ -404,42 +684,47 @@ export function RoleplayManagement({ conversationId }: RoleplayManagementProps) 
         <ScrollArea className="h-[calc(100vh-300px)]">
           {roleplays.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
-              <Theater className="w-8 h-8 mx-auto mb-2 opacity-50" />
+              <Theater className="mx-auto mb-2 w-8 h-8 opacity-50" />
               <p>No roleplays found</p>
               <p className="text-sm">Create a roleplay to get started</p>
             </div>
           ) : (
             <div className="space-y-3">
               {roleplays.map((roleplay) => (
-                <Card key={roleplay.id} className="group hover:shadow-md transition-shadow">
+                <Card
+                  key={roleplay.id}
+                  className="transition-shadow group hover:shadow-md"
+                >
                   <CardHeader className="pb-2">
                     <div className="flex justify-between items-start">
-                      <div className="flex gap-2 items-center min-w-0 flex-1">
-                        <CardTitle className="text-sm truncate">{roleplay.name}</CardTitle>
+                      <div className="flex flex-1 gap-2 items-center min-w-0">
+                        <CardTitle className="text-sm truncate">
+                          {roleplay.name}
+                        </CardTitle>
                         <Badge
                           variant={roleplay.isActive ? "default" : "secondary"}
                           className="text-xs shrink-0"
                         >
                           {roleplay.isActive ? (
                             <>
-                              <CheckCircle2 className="w-3 h-3 mr-1" />
+                              <CheckCircle2 className="mr-1 w-3 h-3" />
                               Active
                             </>
                           ) : (
                             <>
-                              <XCircle className="w-3 h-3 mr-1" />
+                              <XCircle className="mr-1 w-3 h-3" />
                               Inactive
                             </>
                           )}
                         </Badge>
                       </div>
-                      <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <div className="flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() => handleToggleActive(roleplay)}
                           title={roleplay.isActive ? "Deactivate" : "Activate"}
-                          className="h-7 w-7 p-0"
+                          className="p-0 w-7 h-7"
                         >
                           {roleplay.isActive ? (
                             <Pause className="w-3 h-3" />
@@ -452,7 +737,7 @@ export function RoleplayManagement({ conversationId }: RoleplayManagementProps) 
                           variant="ghost"
                           onClick={() => openEditDialog(roleplay)}
                           title="Edit"
-                          className="h-7 w-7 p-0"
+                          className="p-0 w-7 h-7"
                         >
                           <Edit className="w-3 h-3" />
                         </Button>
@@ -461,7 +746,7 @@ export function RoleplayManagement({ conversationId }: RoleplayManagementProps) 
                           variant="ghost"
                           onClick={() => handleDeleteRoleplay(roleplay.id)}
                           title="Delete"
-                          className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                          className="p-0 w-7 h-7 text-destructive hover:text-destructive"
                         >
                           <Trash2 className="w-3 h-3" />
                         </Button>
@@ -470,12 +755,12 @@ export function RoleplayManagement({ conversationId }: RoleplayManagementProps) 
                   </CardHeader>
                   <CardContent className="pt-0">
                     {roleplay.description && (
-                      <p className="text-sm text-muted-foreground mb-2 line-clamp-2">
+                      <p className="mb-2 text-sm text-muted-foreground line-clamp-2">
                         {roleplay.description}
                       </p>
                     )}
                     {roleplay.systemPrompt && (
-                      <div className="p-2 bg-muted/50 rounded text-xs">
+                      <div className="p-2 text-xs rounded bg-muted/50">
                         <p className="text-muted-foreground line-clamp-3">
                           {roleplay.systemPrompt}
                         </p>

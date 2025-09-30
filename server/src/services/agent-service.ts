@@ -16,6 +16,7 @@ import { ToolContextService } from "./tool-context-service";
 import { SummarizationQueueService } from "./summarization-queue-service";
 import { BehavioralMemoryService } from "./behavioral-memory-service";
 import { RoleplayService } from "./roleplay-service";
+import { CharacterKnowledgeService } from "./character-knowledge-service";
 import {
   AgentConfig,
   AgentRequest,
@@ -55,6 +56,7 @@ export class AgentService {
   private summarizationQueueService: SummarizationQueueService;
   private behavioralMemoryService: BehavioralMemoryService;
   private roleplayService: RoleplayService;
+  private characterKnowledgeService: CharacterKnowledgeService;
   private config: AgentConfig;
 
   constructor(
@@ -114,7 +116,16 @@ export class AgentService {
       this.openai,
       this.prisma
     );
-    this.roleplayService = new RoleplayService(this.prisma, this.openai, this.usageTrackingService);
+    this.roleplayService = new RoleplayService(
+      this.prisma,
+      this.openai,
+      this.usageTrackingService
+    );
+    this.characterKnowledgeService = new CharacterKnowledgeService(
+      this.prisma,
+      this.openai,
+      this.usageTrackingService
+    );
 
     this.config = {
       model: process.env.DEFAULT_AGENT_MODEL || "gpt-4o-mini",
@@ -1713,12 +1724,39 @@ ${JSON.stringify(context.data, null, 2)}`;
         context.conversationId!
       );
 
-
-
     // Get active roleplay for this conversation
     const activeRoleplay = await this.roleplayService.getRoleplayForPrompt(
       context.conversationId!
     );
+
+    // Get character RAG context if specific character roleplay is active
+    let characterContext = "";
+    const characterKnowledge =
+      await this.characterKnowledgeService.getActiveCharacterKnowledge(
+        context.conversationId!
+      );
+
+    if (characterKnowledge) {
+      console.log(`🎭 [AGENT] Retrieving character RAG context for query`);
+      // Get the last user message from context
+      const lastUserMessage =
+        context.messageHistory[context.messageHistory.length - 1]?.content ||
+        "";
+      const ragResult =
+        await this.characterKnowledgeService.retrieveCharacterContext(
+          context.conversationId!,
+          lastUserMessage
+        );
+
+      if (ragResult && ragResult.chunks.length > 0) {
+        characterContext = `\n\n## CHARACTER KNOWLEDGE CONTEXT\n${ragResult.chunks
+          .map((chunk) => `[${chunk.type.toUpperCase()}] ${chunk.content}`)
+          .join("\n\n")}`;
+        console.log(
+          `✅ [AGENT] Injected ${ragResult.chunks.length} character knowledge chunks`
+        );
+      }
+    }
 
     // Enhance system prompt with all three systems
     let enhancedSystemPrompt = this.config.systemPrompt;
@@ -1730,23 +1768,25 @@ ${JSON.stringify(context.data, null, 2)}`;
 ## ACTIVE ROLEPLAY INSTRUCTIONS
 You are currently engaged in a roleplay scenario. **CRITICAL**: You MUST maintain this role consistently throughout the conversation:
 
-${activeRoleplay}
+${activeRoleplay}${characterContext}
 
 **ROLEPLAY ADAPTATION RULES:**
 - Stay in character at all times unless explicitly asked to break character
 - Respond as the character would, using their voice, mannerisms, and knowledge level
 - If the roleplay conflicts with safety guidelines, prioritize safety while staying as close to character as possible
 - Use the character's perspective and background to inform all responses
+- Use the character knowledge context provided above to stay authentic to the character
 
 ---`;
     }
 
-
-
     // Add behavioral preferences (communication style)
     if (behavioralMemory && Object.keys(behavioralMemory).length > 0) {
-      const behavioralText = this.behavioralMemoryService.formatBehavioralMemoryAsPoints(behavioralMemory);
-      
+      const behavioralText =
+        this.behavioralMemoryService.formatBehavioralMemoryAsPoints(
+          behavioralMemory
+        );
+
       enhancedSystemPrompt = `${enhancedSystemPrompt}
 
 ## CONVERSATION-SPECIFIC BEHAVIORAL MEMORY & ADAPTATION RULES
@@ -2337,25 +2377,34 @@ ${behavioralText}
     assistantResponse: string
   ): void {
     // Get the user message from context
-    const userMessage = context.messageHistory[context.messageHistory.length - 1]?.content || "";
+    const userMessage =
+      context.messageHistory[context.messageHistory.length - 1]?.content || "";
 
     // Start all memory processing tasks asynchronously
     Promise.allSettled([
       this.updateBehavioralMemoryAsync(context.conversationId!, userMessage),
-      this.enhanceRoleplayAsync(context.conversationId!, userMessage, assistantResponse, context.userId)
+      this.enhanceRoleplayAsync(
+        context.conversationId!,
+        userMessage,
+        assistantResponse,
+        context.userId
+      ),
     ]).then((results) => {
       results.forEach((result, index) => {
-        const taskNames = ['Behavioral Memory', 'Roleplay Enhancement'];
-        if (result.status === 'rejected') {
-          console.error(`❌ [${taskNames[index]}] Background processing failed:`, result.reason);
+        const taskNames = ["Behavioral Memory", "Roleplay Enhancement"];
+        if (result.status === "rejected") {
+          console.error(
+            `❌ [${taskNames[index]}] Background processing failed:`,
+            result.reason
+          );
         } else {
-          console.log(`✅ [${taskNames[index]}] Background processing completed successfully`);
+          console.log(
+            `✅ [${taskNames[index]}] Background processing completed successfully`
+          );
         }
       });
     });
   }
-
-
 
   /**
    * Automatically detects roleplay mentions and enhances them
@@ -2376,7 +2425,7 @@ ${behavioralText}
         /pretend to be a?n? (.+)/i,
         /roleplay as a?n? (.+)/i,
         /play the role of a?n? (.+)/i,
-        /be a?n? (.+)/i
+        /be a?n? (.+)/i,
       ];
 
       let detectedRole: string | null = null;
@@ -2392,33 +2441,45 @@ ${behavioralText}
         console.log(`🎭 [ROLEPLAY ENHANCEMENT] Detected role: ${detectedRole}`);
 
         // Check if roleplay already exists for this conversation
-        const existingRoleplay = await this.roleplayService.getActiveRoleplay(conversationId);
-        
+        const existingRoleplay = await this.roleplayService.getActiveRoleplay(
+          conversationId
+        );
+
         if (!existingRoleplay) {
           // Create and enhance new roleplay using the conversation context
           const conversationContext = `${userMessage}\n\nAssistant: ${assistantResponse}`;
-          
+
+          // Get web search tool for character research
+          const webSearchTool = this.toolRegistry.getTool("web_search");
+
           await this.roleplayService.enhanceAndStoreRoleplay(
             conversationId,
             userId || null,
             detectedRole,
-            conversationContext
+            conversationContext,
+            webSearchTool
           );
 
-          console.log("🎭 [ROLEPLAY ENHANCEMENT] New roleplay created and enhanced");
+          console.log(
+            "🎭 [ROLEPLAY ENHANCEMENT] New roleplay created and enhanced"
+          );
         } else {
-          console.log("🎭 [ROLEPLAY ENHANCEMENT] Roleplay already exists for this conversation");
+          console.log(
+            "🎭 [ROLEPLAY ENHANCEMENT] Roleplay already exists for this conversation"
+          );
         }
       } else {
-        console.log("🎭 [ROLEPLAY ENHANCEMENT] No roleplay indicators detected");
+        console.log(
+          "🎭 [ROLEPLAY ENHANCEMENT] No roleplay indicators detected"
+        );
       }
     } catch (error) {
-       console.error(
-         "🎭 [ROLEPLAY ENHANCEMENT] Automatic enhancement failed:",
-         error instanceof Error ? error.message : "Unknown error"
-       );
-     }
-   }
+      console.error(
+        "🎭 [ROLEPLAY ENHANCEMENT] Automatic enhancement failed:",
+        error instanceof Error ? error.message : "Unknown error"
+      );
+    }
+  }
 
   async getConversationHistory(
     conversationId: string
@@ -2525,7 +2586,9 @@ ${behavioralText}
       );
 
       const currentBehavioralMemory =
-        await this.behavioralMemoryService.getBehavioralBehaviors(conversationId);
+        await this.behavioralMemoryService.getBehavioralBehaviors(
+          conversationId
+        );
 
       await this.behavioralMemoryService.updateBehavioralMemory(
         conversationId,
