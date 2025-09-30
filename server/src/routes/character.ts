@@ -38,8 +38,10 @@ router.get(
       );
 
     if (!characterKnowledge) {
-      return res.status(404).json({
-        error: "No active character knowledge found for this conversation",
+      return res.json({
+        success: true,
+        data: null,
+        message: "No active character knowledge found for this conversation",
       });
     }
 

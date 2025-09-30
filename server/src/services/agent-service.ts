@@ -1766,36 +1766,12 @@ ${activeRoleplay}${characterContext}
 
       enhancedSystemPrompt = `${enhancedSystemPrompt}
 
-## CONVERSATION-SPECIFIC BEHAVIORAL MEMORY & ADAPTATION RULES
-The following behavioral preferences and communication style have been learned from this specific conversation. **CRITICALLY IMPORTANT**: You MUST actively adapt ALL aspects of your responses based on this memory:
+## CONVERSATION-SPECIFIC BEHAVIORAL MEMORY
+You have learned these communication preferences from this user:
 
 ${behavioralText}
 
-### BEHAVIORAL ADAPTATION INSTRUCTIONS:
-**Communication Style Adaptation:**
-- If memory indicates "brief/direct" → Keep responses concise, avoid lengthy explanations unless specifically requested
-- If memory indicates "detailed" → Provide comprehensive explanations with examples and context
-- If memory indicates "formal" → Use professional language, proper grammar, structured responses
-- If memory indicates "casual" → Use conversational tone, contractions, informal language
-
-**Tone Matching:**
-- If memory indicates "conversational" → Be friendly, natural, like talking to a colleague
-- If memory indicates "professional" → Maintain business-appropriate formality and precision
-- If memory indicates "technical" → Use appropriate technical terminology and precise language
-- If memory indicates "humorous" → Include appropriate light humor and casual expressions
-
-**Response Format Adaptation:**
-- If memory indicates preference for "bullet points" → Structure responses with clear bullet points
-- If memory indicates "step-by-step" → Break down complex topics into numbered steps
-- If memory indicates "examples" → Always include relevant examples and analogies
-- If memory indicates dislikes "excessive detail" → Keep explanations focused and to-the-point
-
-**Technical Level Matching:**
-- If memory indicates "beginner" → Explain concepts simply, avoid jargon, provide background context
-- If memory indicates "intermediate" → Use moderate technical terms with brief explanations
-- If memory indicates "expert" → Use advanced terminology, assume domain knowledge
-
-**CRITICAL**: These behavioral adaptations should be applied to EVERY response, not just when explicitly mentioned. The user's communication preferences should drive how you naturally communicate throughout the entire conversation.
+**CRITICAL**: Apply these preferences consistently to ALL your responses. These are not suggestions - they define how this user wants you to communicate. Match their preferred communication style, detail level, tone, response format, technical depth, and interaction approach throughout the conversation.
 
 ---`;
     }

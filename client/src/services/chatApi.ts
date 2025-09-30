@@ -454,4 +454,59 @@ export class ChatApiService {
       body: JSON.stringify(roleplayData),
     });
   }
+
+  // Character API methods
+  static async getCharacterKnowledge(conversationId: string): Promise<{
+    success: boolean;
+    data: any;
+  }> {
+    return this.request<{
+      success: boolean;
+      data: any;
+    }>(`/character/${conversationId}`);
+  }
+
+  static async researchCharacter(
+    conversationId: string,
+    characterData: { characterName: string; characterSource?: string }
+  ): Promise<{
+    success: boolean;
+    data: any;
+  }> {
+    return this.request<{
+      success: boolean;
+      data: any;
+    }>(`/character/${conversationId}/research`, {
+      method: "POST",
+      body: JSON.stringify(characterData),
+    });
+  }
+
+  static async deactivateCharacterKnowledge(conversationId: string): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    return this.request<{
+      success: boolean;
+      message: string;
+    }>(`/character/${conversationId}`, {
+      method: "DELETE",
+    });
+  }
+
+  static async retrieveCharacterContext(
+    conversationId: string,
+    query: string
+  ): Promise<{
+    success: boolean;
+    data: any;
+  }> {
+    return this.request<{
+      success: boolean;
+      data: any;
+    }>(`/character/${conversationId}/retrieve`, {
+      method: "POST",
+      body: JSON.stringify({ query }),
+    });
+  }
 }
