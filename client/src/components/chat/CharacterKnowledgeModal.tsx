@@ -455,3 +455,4 @@ export function CharacterKnowledgeModal({
     </Dialog>
   );
 }
+
